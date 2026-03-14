@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tasklist)",
+      "Bash(findstr /i \"tauri cargo node msi candle light\")",
+      "Bash(findstr /i \"tauri-app\")",
+      "Bash(npm run:*)",
+      "Bash(taskkill //f //im tauri-app.exe 2)",
+      "Bash(/dev/null cd:*)"
+    ]
+  }
+}
