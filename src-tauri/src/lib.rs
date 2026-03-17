@@ -18,9 +18,131 @@ struct WatcherState {
 
 static FILE_WATCHER: Mutex<Option<WatcherState>> = Mutex::new(None);
 
+#[derive(serde::Serialize)]
+struct ExternalPluginDescriptor {
+    path: String,
+    config: serde_json::Value,
+}
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+/// 获取插件目录列表
+#[tauri::command]
+fn get_plugin_dirs(app: tauri::AppHandle) -> Vec<String> {
+    let mut dirs = Vec::new();
+
+    // 1. 可执行文件所在目录的 plugins 文件夹
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let plugin_dir = exe_dir.join("plugins");
+            let path_str = plugin_dir.to_string_lossy().to_string();
+            println!("[Rust] Exe plugin dir: {}", path_str);
+            dirs.push(path_str);
+        }
+    }
+
+    // 2. 资源目录的 plugins 文件夹
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let plugin_dir = resource_dir.join("plugins");
+        let path_str = plugin_dir.to_string_lossy().to_string();
+        println!("[Rust] Resource plugin dir: {}", path_str);
+        dirs.push(path_str);
+    }
+
+    // 3. 用户数据目录的 plugins 文件夹
+    if let Ok(app_data_dir) = app.path().app_data_dir() {
+        let plugin_dir = app_data_dir.join("plugins");
+        let path_str = plugin_dir.to_string_lossy().to_string();
+        println!("[Rust] AppData plugin dir: {}", path_str);
+        dirs.push(path_str);
+    }
+
+    println!("[Rust] Total plugin dirs: {:?}", dirs);
+    dirs
+}
+
+#[tauri::command]
+fn list_external_plugins(app: tauri::AppHandle) -> Vec<ExternalPluginDescriptor> {
+    let mut plugins = Vec::new();
+
+    for plugin_dir in get_plugin_dirs(app) {
+        let dir_path = Path::new(&plugin_dir);
+        let entries = match fs::read_dir(dir_path) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+
+        for entry in entries.flatten() {
+            let plugin_path = entry.path();
+            if !plugin_path.is_dir() {
+                continue;
+            }
+
+            let config_path = plugin_path.join("plugin.json");
+            let config_content = match fs::read_to_string(&config_path) {
+                Ok(content) => content,
+                Err(_) => continue,
+            };
+
+            let config = match serde_json::from_str::<serde_json::Value>(&config_content) {
+                Ok(config) => config,
+                Err(_) => continue,
+            };
+
+            plugins.push(ExternalPluginDescriptor {
+                path: plugin_path.to_string_lossy().to_string(),
+                config,
+            });
+        }
+    }
+
+    plugins
+}
+
+#[tauri::command]
+fn read_external_plugin_file(
+    app: tauri::AppHandle,
+    plugin_path: String,
+    file_name: String,
+) -> Result<String, String> {
+    if file_name.contains("..") || Path::new(&file_name).is_absolute() {
+        return Err("Invalid plugin file name".to_string());
+    }
+
+    let plugin_path_buf = Path::new(&plugin_path)
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+
+    let mut allowed = false;
+    for dir in get_plugin_dirs(app) {
+        let canonical_dir = match Path::new(&dir).canonicalize() {
+            Ok(dir) => dir,
+            Err(_) => continue,
+        };
+
+        if plugin_path_buf.starts_with(canonical_dir) {
+            allowed = true;
+            break;
+        }
+    }
+
+    if !allowed {
+        return Err("Plugin path is not in allowed directories".to_string());
+    }
+
+    let target_file = plugin_path_buf
+        .join(&file_name)
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+
+    if !target_file.starts_with(&plugin_path_buf) {
+        return Err("Invalid plugin file path".to_string());
+    }
+
+    fs::read_to_string(target_file).map_err(|e| e.to_string())
 }
 
 #[derive(serde::Serialize)]
@@ -161,6 +283,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_fs::init())
         // 单实例插件：当用户用此应用打开文件时，如果已有实例运行，会发送事件
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // 获取主窗口并显示/聚焦
@@ -187,7 +310,10 @@ pub fn run() {
             save_file,
             take_launch_file_path,
             watch_file,
-            unwatch_file
+            unwatch_file,
+            get_plugin_dirs,
+            list_external_plugins,
+            read_external_plugin_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -8,6 +8,18 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "dialog:default"
+    "dialog:default",
+    "fs:default",
+    "fs:allow-resource-read-recursive",
+    "fs:allow-appdata-read-recursive",
+    "fs:allow-read-dir",
+    "fs:allow-read-text-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        "$APPDATA/plugins/**",
+        "$RESOURCE/plugins/**"
+      ]
+    }
   ]
 }

@@ -1,9 +1,8 @@
-import { CSSProperties, useCallback, useEffect, useRef, useState, lazy, Suspense, useMemo } from "react";
+import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { javascript } from "@codemirror/lang-javascript";
@@ -15,52 +14,9 @@ import { sql } from "@codemirror/lang-sql";
 import { java } from "@codemirror/lang-java";
 import { rectangularSelection, EditorView } from "@codemirror/view";
 import { oneDark } from "@codemirror/theme-one-dark";
-import remarkGfm from "remark-gfm";
+import PreviewEngine, { type PreviewMode } from "./components/PreviewEngine";
+import { initializeExternalPlugins } from "./plugins/component-registry";
 import "./App.css";
-
-// 懒加载 ReactMarkdown 预览组件，提升启动速度
-const ReactMarkdown = lazy(() => import("react-markdown"));
-
-// 自定义图片组件，支持本地图片路径
-function MarkdownImage({ src, alt, currentFilePath }: { src?: string; alt?: string; currentFilePath?: string | null }) {
-  const resolvedSrc = useMemo(() => {
-    if (!src) return src;
-    // 网络图片直接返回
-    if (src.startsWith("http://") || src.startsWith("https://") || src.startsWith("data:")) {
-      return src;
-    }
-
-    let absolutePath = src;
-
-    // 处理相对路径：基于当前文件目录解析
-    if (currentFilePath && !src.match(/^[A-Za-z]:/) && !src.startsWith("/")) {
-      const fileDir = currentFilePath.substring(0, currentFilePath.replace(/\\/g, "/").lastIndexOf("/"));
-      // 标准化路径分隔符
-      const normalizedDir = fileDir.replace(/\\/g, "/");
-      // 处理 ./ 和 ../
-      const parts = normalizedDir.split("/");
-      const srcParts = src.replace(/\\/g, "/").split("/");
-
-      for (const part of srcParts) {
-        if (part === "..") {
-          parts.pop();
-        } else if (part !== ".") {
-          parts.push(part);
-        }
-      }
-      absolutePath = parts.join("/");
-    }
-
-    // 本地文件路径
-    try {
-      return convertFileSrc(absolutePath);
-    } catch {
-      return src;
-    }
-  }, [src, currentFilePath]);
-
-  return <img src={resolvedSrc} alt={alt} style={{ maxWidth: "100%" }} />;
-}
 
 type EditorTab = {
   id: string;
@@ -80,6 +36,10 @@ function App() {
   ]);
   const [activeTabId, setActiveTabId] = useState<string>("tab-initial");
   const [viewMode, setViewMode] = useState<"edit" | "preview" | "split">("edit");
+  const [previewMode, setPreviewMode] = useState<PreviewMode>(() => {
+    const saved = localStorage.getItem("previewMode");
+    return (saved as PreviewMode) || "standard";
+  });
   const [fontFamily, setFontFamily] = useState<string>("Consolas");
   const [fontSize, setFontSize] = useState<number>(15);
   const [wordWrap, setWordWrap] = useState<boolean>(true);
@@ -322,6 +282,15 @@ function App() {
     document.documentElement.setAttribute("data-theme", currentTheme);
     localStorage.setItem("themeMode", themeMode);
   }, [currentTheme, themeMode]);
+
+  // 初始化外部插件系统
+  useEffect(() => {
+    initializeExternalPlugins().then(() => {
+      console.log("[App] External plugins initialized");
+    }).catch((err) => {
+      console.warn("[App] Failed to initialize external plugins:", err);
+    });
+  }, []);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -773,14 +742,33 @@ function App() {
         
         {(viewMode === 'preview' || viewMode === 'split') && (
           <div className="preview-pane markdown-body">
-            <Suspense fallback={<div className="preview-loading">加载预览...</div>}>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  img: ({ node, ...props }) => <MarkdownImage {...props} currentFilePath={filePath} />
+            <div className="preview-mode-toggle">
+              <button
+                className={`preview-mode-btn ${previewMode === 'standard' ? 'active' : ''}`}
+                onClick={() => {
+                  setPreviewMode('standard');
+                  localStorage.setItem('previewMode', 'standard');
                 }}
-              >{content}</ReactMarkdown>
-            </Suspense>
+                title="标准预览"
+              >
+                标准
+              </button>
+              <button
+                className={`preview-mode-btn ${previewMode === 'enhanced' ? 'active' : ''}`}
+                onClick={() => {
+                  setPreviewMode('enhanced');
+                  localStorage.setItem('previewMode', 'enhanced');
+                }}
+                title="增强预览（支持算法可视化）"
+              >
+                增强
+              </button>
+            </div>
+            <PreviewEngine
+              content={content}
+              mode={previewMode}
+              currentFilePath={filePath}
+            />
           </div>
         )}
       </div>

@@ -27,6 +27,69 @@ English | **[中文](./README.md)**
 - **Split Mode** - Editor on the left, live preview on the right
 - **Preview Mode** - Pure preview view
 - **GitHub Flavored Markdown** - Supports GFM extended syntax (tables, task lists, etc.)
+- **Enhanced Preview Mode** - Supports interactive components like algorithm visualization
+
+### Enhanced Preview (Algorithm Visualization)
+
+EditLite has built-in algorithm visualization functionality, no plugin installation required. Use special directives in Markdown to display dynamic algorithm demonstrations.
+
+#### Usage
+
+1. Enter the directive syntax in a Markdown file
+2. Switch to **Split** or **Preview** mode
+3. Click the **"Enhanced"** button above the preview area
+4. Use control buttons to operate the animation
+
+#### Built-in Components
+
+##### Sorting Visualization Directive
+
+```markdown
+:sort{array=[64, 34, 25, 12, 22, 11, 90], algorithm="bubble", speed=400}
+```
+
+##### Parameters
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `array` | `[number]` | Array of numbers to sort | `[5, 2, 8, 1, 9]` |
+| `algorithm` | string | Algorithm type | `bubble` |
+| `speed` | number | Animation speed (ms) | `300` |
+| `showSteps` | boolean | Show step descriptions | `true` |
+
+##### Supported Sorting Algorithms
+
+| Algorithm | Description |
+|-----------|-------------|
+| `bubble` | Bubble Sort |
+| `quick` | Quick Sort |
+| `merge` | Merge Sort |
+| `insertion` | Insertion Sort |
+| `selection` | Selection Sort |
+
+#### External Plugin System
+
+EditLite supports user-developed custom plugins that can be placed in the plugins directory without repackaging the application.
+
+**Example Plugin: Counter**
+
+```markdown
+:counter{initialValue=10, step=5, min=0, max=100}
+```
+
+For detailed development guide, see [Development Guide](./DEVELOPMENT.md).
+
+#### Complete Example
+
+```markdown
+# Sorting Algorithm Demo
+
+## Bubble Sort
+:sort{array=[64, 34, 25, 12, 22, 11, 90], algorithm="bubble", speed=400}
+
+## Quick Sort
+:sort{array=[9, 7, 5, 11, 12, 2, 14, 3], algorithm="quick", speed=300}
+```
 
 ### Interface Customization
 - **Theme Switching** - Supports system theme, light theme, and dark theme modes
@@ -50,6 +113,7 @@ English | **[中文](./README.md)**
 - **Backend**: Tauri 2 + Rust
 - **Editor**: CodeMirror 6
 - **Markdown**: react-markdown + remark-gfm
+- **Visualization**: Custom algorithm animation components (lazy loaded)
 
 ## Development
 
@@ -83,16 +147,32 @@ The installer will be generated in `src-tauri/target/release/bundle/`.
 
 ```
 edit_lite/
-├── src/                    # Frontend source
-│   ├── App.tsx             # Main app component
-│   ├── App.css             # Styles
-│   └── main.tsx            # Entry point
-├── src-tauri/              # Tauri backend
+├── src/                          # Frontend source
+│   ├── App.tsx                   # Main app component
+│   ├── App.css                   # Styles
+│   ├── main.tsx                  # Entry point
+│   ├── core/types/               # Type definitions
+│   │   └── directive.ts          # Directive types
+│   ├── plugins/                  # Plugin system
+│   │   ├── remark-directive-custom.ts  # Directive parser plugin
+│   │   └── component-registry.ts       # Component registry
+│   ├── components/               # UI components
+│   │   ├── PreviewEngine/        # Dual-mode preview engine
+│   │   ├── ExternalPluginLoader/ # External plugin loader
+│   │   └── PluginSandbox/        # Plugin sandbox
+│   └── visualizers/              # Visualization components
+│       └── algorithms/           # Algorithm visualizers
+│           └── SortVisualizer.tsx
+├── plugins/                      # External plugins directory
+│   └── example-counter/          # Counter example plugin
+│       ├── plugin.json           # Plugin config
+│       └── index.html            # Plugin implementation
+├── src-tauri/                    # Tauri backend
 │   ├── src/
-│   │   ├── main.rs         # Entry
-│   │   └── lib.rs          # Core logic
-│   ├── Cargo.toml          # Rust dependencies
-│   └── tauri.conf.json     # Tauri config
+│   │   ├── main.rs               # Entry
+│   │   └── lib.rs                # Core logic
+│   ├── Cargo.toml                # Rust dependencies
+│   └── tauri.conf.json           # Tauri config
 ├── package.json
 └── README.md
 ```
@@ -111,7 +191,7 @@ edit_lite/
 | .rs | Rust |
 | .py | Python |
 
-## Roadmaprcmd
+## Roadmap
 
 - [x] Markdown syntax support
 - [x] JavaScript syntax support
@@ -121,8 +201,20 @@ edit_lite/
 - [x] Find and replace
 - [x] Dark theme
 - [x] More syntax highlighting
+- [x] Enhanced preview engine (dual mode)
+- [x] Sorting algorithm visualization
+- [ ] Search algorithm visualization
+- [ ] Graph algorithm visualization
+- [ ] LaTeX formula support
+- [ ] 3D Earth visualization
 - [ ] Auto save
 
 ## License
 
 MIT License
+
+---
+
+## Documentation
+
+- [Development Guide](./DEVELOPMENT.md) - Detailed usage and development guide for enhanced preview features

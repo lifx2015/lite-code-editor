@@ -27,6 +27,7 @@ chardetng = "0.1"
 anyhow = "1.0"
 tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-fs = "2"
 notify = "6"
 
 [profile.release]

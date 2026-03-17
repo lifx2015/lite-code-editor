@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "id": "example-counter",
+    "name": "计数器示例",
+    "version": "1.0.0",
+    "author": "EditLite Team",
+    "description": "一个简单的计数器插件示例，演示插件开发流程",
+    "directives": [
+      {
+        "name": "counter",
+        "description": "显示一个交互式计数器",
+        "params": [
+          {
+            "name": "initialValue",
+            "type": "number",
+            "required": false,
+            "default": 0,
+            "description": "计数器初始值"
+          },
+          {
+            "name": "step",
+            "type": "number",
+            "required": false,
+            "default": 1,
+            "description": "每次增减的步长"
+          },
+          {
+            "name": "min",
+            "type": "number",
+            "required": false,
+            "default": -100,
+            "description": "最小值"
+          },
+          {
+            "name": "max",
+            "type": "number",
+            "required": false,
+            "default": 100,
+            "description": "最大值"
+          }
+        ],
+        "examples": [
+          ":counter{initialValue=10, step=5}",
+          ":counter{min=0, max=50, step=2}"
+        ]
+      }
+    ]
+  },
+  "main": "index.html",
+  "style": "style.css"
+}
