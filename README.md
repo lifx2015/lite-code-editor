@@ -1,9 +1,9 @@
 # EditLite
-
+A lightweight text editor built on Tauri, focusing on simplicity and efficiency.
 一款基于 Tauri 构建的轻量级文本编辑器，专注于简洁与高效。
 
 **[English](./README_en.md)** | 中文
-
+![EditLite 截图](./demo1.png)
 ![EditLite 截图](./screenshot.png)
 ## 功能特性
 
