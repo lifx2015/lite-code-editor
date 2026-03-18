@@ -1,4 +1,8 @@
 # EditLite
+![GitHub stars](https://img.shields.io/github/stars/lifx2015/edit_lite?style=social)
+![npm](https://img.shields.io/npm/v/lifx-edit)  <!-- 如果发包 -->
+![License](https://img.shields.io/github/license/lifx2015/edit_lite)
+
 A lightweight text editor built on Tauri, focusing on simplicity and efficiency.
 一款基于 Tauri 构建的轻量级文本编辑器，专注于简洁与高效。
 
