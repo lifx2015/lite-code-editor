@@ -151,38 +151,160 @@ const MarkdownImage: React.FC<{
 
 /**
  * 检测文本是否为指令并提取参数
+ * 支持：嵌套对象/数组（单行格式）
  */
 function parseDirective(text: string): { name: string; args: Record<string, unknown> } | null {
-  const match = text.trim().match(/^:([a-zA-Z][a-zA-Z0-9]*)\s*\{([^}]*)\}$/);
-  if (!match) return null;
+  const trimmed = text.trim();
 
-  const name = match[1];
-  const argsString = match[2];
-  const args: Record<string, unknown> = {};
+  // 检查是否以 :name{ 开头
+  const headerMatch = trimmed.match(/^:([a-zA-Z][a-zA-Z0-9]*)\s*\{/);
+  if (!headerMatch) return null;
 
-  if (argsString.trim()) {
-    const argPattern = /([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(\[[^\]]*\]|"[^"]*"|'[^']*'|[^,\s]+)/g;
-    let argMatch;
-    while ((argMatch = argPattern.exec(argsString)) !== null) {
-      let value: unknown = argMatch[2];
-      if (typeof value === 'string') {
-        if (value.startsWith('[') && value.endsWith(']')) {
-          try { value = JSON.parse(value); } catch { /* keep */ }
-        } else if (value.startsWith('"') || value.startsWith("'")) {
-          value = value.slice(1, -1);
-        } else if (!isNaN(Number(value))) {
-          value = Number(value);
-        } else if (value === 'true') {
-          value = true;
-        } else if (value === 'false') {
-          value = false;
-        }
+  const name = headerMatch[1];
+
+  // 使用括号匹配找到完整的指令体
+  let braceCount = 0;
+  let startIndex = headerMatch[0].length - 1;
+  let endIndex = -1;
+
+  for (let i = startIndex; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    if (char === '{') braceCount++;
+    else if (char === '}') {
+      braceCount--;
+      if (braceCount === 0) {
+        endIndex = i;
+        break;
       }
-      args[argMatch[1]] = value;
     }
   }
 
+  if (endIndex === -1) return null;
+  if (trimmed.slice(endIndex + 1).trim()) return null;
+
+  const argsString = trimmed.slice(startIndex + 1, endIndex);
+  const args = parseDirectiveArgs(argsString);
+
   return { name, args };
+}
+
+/**
+ * 解析指令参数字符串（支持嵌套结构）
+ */
+function parseDirectiveArgs(argsString: string): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
+  if (!argsString.trim()) return args;
+
+  let pos = 0;
+  const len = argsString.length;
+
+  while (pos < len) {
+    while (pos < len && /[\s,]/.test(argsString[pos])) pos++;
+    if (pos >= len) break;
+
+    const nameMatch = argsString.slice(pos).match(/^([a-zA-Z_][a-zA-Z0-9_]*)/);
+    if (!nameMatch) break;
+    const argName = nameMatch[1];
+    pos += argName.length;
+
+    while (pos < len && /\s/.test(argsString[pos])) pos++;
+    if (pos >= len || argsString[pos] !== '=') break;
+    pos++;
+
+    while (pos < len && /\s/.test(argsString[pos])) pos++;
+
+    const { value, newPos } = parseValue(argsString, pos);
+    args[argName] = value;
+    pos = newPos;
+  }
+
+  return args;
+}
+
+/**
+ * 解析一个值（支持嵌套数组/对象）
+ */
+function parseValue(str: string, pos: number): { value: unknown; newPos: number } {
+  if (pos >= str.length) return { value: undefined, newPos: pos };
+
+  const char = str[pos];
+
+  if (char === '"' || char === "'") {
+    const quote = char;
+    let i = pos + 1;
+    while (i < str.length) {
+      if (str[i] === '\\' && i + 1 < str.length) { i += 2; continue; }
+      if (str[i] === quote) break;
+      i++;
+    }
+    const rawValue = str.slice(pos + 1, i);
+    const value = rawValue.replace(/\\(.)/g, '$1');
+    return { value, newPos: i + 1 };
+  }
+
+  if (char === '[') return parseArray(str, pos);
+  if (char === '{') return parseObject(str, pos);
+
+  let i = pos;
+  while (i < str.length && !/[\s,}\]]/.test(str[i])) i++;
+  const token = str.slice(pos, i);
+
+  if (token === 'true') return { value: true, newPos: i };
+  if (token === 'false') return { value: false, newPos: i };
+  if (token === 'null') return { value: null, newPos: i };
+  if (!isNaN(Number(token)) && token !== '') return { value: Number(token), newPos: i };
+
+  return { value: token, newPos: i };
+}
+
+function parseArray(str: string, pos: number): { value: unknown[]; newPos: number } {
+  const arr: unknown[] = [];
+  pos++;
+
+  while (pos < str.length) {
+    while (pos < str.length && /[\s,]/.test(str[pos])) pos++;
+    if (pos >= str.length) break;
+    if (str[pos] === ']') { pos++; break; }
+    const { value, newPos } = parseValue(str, pos);
+    arr.push(value);
+    pos = newPos;
+  }
+
+  return { value: arr, newPos: pos };
+}
+
+function parseObject(str: string, pos: number): { value: Record<string, unknown>; newPos: number } {
+  const obj: Record<string, unknown> = {};
+  pos++;
+
+  while (pos < str.length) {
+    while (pos < str.length && /[\s,]/.test(str[pos])) pos++;
+    if (pos >= str.length) break;
+    if (str[pos] === '}') { pos++; break; }
+
+    let key: string;
+    if (str[pos] === '"' || str[pos] === "'") {
+      const { value, newPos } = parseValue(str, pos);
+      key = String(value);
+      pos = newPos;
+    } else {
+      const keyMatch = str.slice(pos).match(/^([a-zA-Z_][a-zA-Z0-9_]*)/);
+      if (!keyMatch) break;
+      key = keyMatch[1];
+      pos += key.length;
+    }
+
+    while (pos < str.length && /\s/.test(str[pos])) pos++;
+    if (pos >= str.length || (str[pos] !== '=' && str[pos] !== ':')) break;
+    pos++;
+    while (pos < str.length && /\s/.test(str[pos])) pos++;
+
+    const { value, newPos } = parseValue(str, pos);
+    obj[key] = value;
+    pos = newPos;
+  }
+
+  return { value: obj, newPos: pos };
 }
 
 const EnhancedMarkdown: React.FC<EnhancedMarkdownProps> = ({ content, currentFilePath }) => {

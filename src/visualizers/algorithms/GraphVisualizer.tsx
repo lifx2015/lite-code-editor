@@ -74,6 +74,37 @@ const nodePositions: Record<string, { x: number; y: number }> = {
   F: { x: 350, y: 40 },
 };
 
+// 为自定义节点计算布局位置
+function calculateNodePositions(nodes: GraphNode[]): Record<string, { x: number; y: number }> {
+  const positions: Record<string, { x: number; y: number }> = {};
+
+  // 首先使用预定义位置
+  for (const node of nodes) {
+    if (nodePositions[node.id]) {
+      positions[node.id] = nodePositions[node.id];
+    }
+  }
+
+  // 为没有预定义位置的节点计算位置（圆形布局）
+  const unpositionedNodes = nodes.filter(n => !positions[n.id]);
+  if (unpositionedNodes.length > 0) {
+    const centerX = 200;
+    const centerY = 90;
+    const radius = 70;
+    const count = unpositionedNodes.length;
+
+    unpositionedNodes.forEach((node, idx) => {
+      const angle = (2 * Math.PI * idx) / count - Math.PI / 2;
+      positions[node.id] = {
+        x: centerX + radius * Math.cos(angle),
+        y: centerY + radius * Math.sin(angle),
+      };
+    });
+  }
+
+  return positions;
+}
+
 // ============================================
 // 图算法实现
 // ============================================
@@ -403,6 +434,9 @@ const GraphVisualizer: React.FC<VisualizerProps<GraphConfig>> = ({ args, onState
     return set;
   }, [pathEdges]);
 
+  // 计算节点位置（支持自定义节点）
+  const computedPositions = useMemo(() => calculateNodePositions(nodes), [nodes]);
+
   return (
     <div className="graph-visualizer">
       <div className="visualizer-controls">
@@ -421,8 +455,8 @@ const GraphVisualizer: React.FC<VisualizerProps<GraphConfig>> = ({ args, onState
       <svg className="graph-canvas" viewBox="0 0 400 180">
         {/* 边 */}
         {edges.map((edge, idx) => {
-          const from = nodePositions[edge.from];
-          const to = nodePositions[edge.to];
+          const from = computedPositions[edge.from];
+          const to = computedPositions[edge.to];
           if (!from || !to) return null;
           const isActive = activeEdges.has(edgeKey(edge.from, edge.to));
           return (
@@ -450,7 +484,7 @@ const GraphVisualizer: React.FC<VisualizerProps<GraphConfig>> = ({ args, onState
 
         {/* 节点 */}
         {nodes.map(node => {
-          const pos = nodePositions[node.id];
+          const pos = computedPositions[node.id];
           if (!pos) return null;
           const isVisited = visited.includes(node.id);
           const isCurrent = current === node.id;

@@ -269,4 +269,53 @@ registerComponents([
     description: '曲线图',
     category: 'math',
   },
+  // 树结构可视化
+  {
+    name: 'tree',
+    loader: () => import('../visualizers/trees/TreeVisualizer'),
+    description: '树结构可视化 (二叉树、BST、AVL、红黑树)',
+    category: 'algorithm',
+  },
+  // 堆可视化
+  {
+    name: 'heap',
+    loader: () => import('../visualizers/datastructures/HeapVisualizer'),
+    description: '堆可视化 (最大堆、最小堆)',
+    category: 'algorithm',
+  },
+  // 栈可视化
+  {
+    name: 'stack',
+    loader: () => import('../visualizers/datastructures/StackQueueVisualizer'),
+    description: '栈可视化 (LIFO)',
+    category: 'algorithm',
+  },
+  // 队列可视化
+  {
+    name: 'queue',
+    loader: () => import('../visualizers/datastructures/StackQueueVisualizer'),
+    description: '队列可视化 (FIFO)',
+    category: 'algorithm',
+  },
+  // 链表可视化
+  {
+    name: 'linkedlist',
+    loader: () => import('../visualizers/datastructures/LinkedListVisualizer'),
+    description: '链表可视化 (单链表、双链表、环形链表)',
+    category: 'algorithm',
+  },
+  // 哈希表可视化
+  {
+    name: 'hashtable',
+    loader: () => import('../visualizers/datastructures/HashTableVisualizer'),
+    description: '哈希表可视化 (链地址法、开放寻址法)',
+    category: 'algorithm',
+  },
+  // 字符串匹配可视化
+  {
+    name: 'stringmatch',
+    loader: () => import('../visualizers/algorithms/StringMatchVisualizer'),
+    description: '字符串匹配可视化 (朴素匹配、KMP、Boyer-Moore)',
+    category: 'algorithm',
+  },
 ]);

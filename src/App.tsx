@@ -12,7 +12,9 @@ import { html } from "@codemirror/lang-html";
 import { python } from "@codemirror/lang-python";
 import { sql } from "@codemirror/lang-sql";
 import { java } from "@codemirror/lang-java";
-import { rectangularSelection, EditorView } from "@codemirror/view";
+import { yaml } from "@codemirror/lang-yaml";
+import { search, searchKeymap } from "@codemirror/search";
+import { rectangularSelection, EditorView, keymap } from "@codemirror/view";
 import { oneDark } from "@codemirror/theme-one-dark";
 import PreviewEngine, { type PreviewMode, type PreviewEngineRef } from "./components/PreviewEngine";
 import Toc from "./components/Toc";
@@ -78,6 +80,7 @@ function App() {
     if (lowerPath.endsWith(".py")) return "python";
     if (lowerPath.endsWith(".sql")) return "sql";
     if (lowerPath.endsWith(".java")) return "java";
+    if (lowerPath.endsWith(".yaml") || lowerPath.endsWith(".yml")) return "yaml";
     return "text";
   };
 
@@ -185,7 +188,7 @@ function App() {
   };
 
   const getExtensions = () => {
-    const baseExtensions = [rectangularSelection()];
+    const baseExtensions = [rectangularSelection(), search(), keymap.of(searchKeymap)];
     if (wordWrap) {
       baseExtensions.push(EditorView.lineWrapping);
     }
@@ -198,6 +201,7 @@ function App() {
       case 'python': return [...baseExtensions, python()];
       case 'sql': return [...baseExtensions, sql()];
       case 'java': return [...baseExtensions, java()];
+      case 'yaml': return [...baseExtensions, yaml()];
       default: return baseExtensions;
     }
   };
@@ -602,6 +606,7 @@ function App() {
             <option value="markdown">Markdown</option>
             <option value="javascript">JavaScript/TypeScript</option>
             <option value="json">JSON</option>
+            <option value="yaml">YAML</option>
             <option value="css">CSS</option>
             <option value="html">HTML</option>
             <option value="python">Python</option>
