@@ -1,14 +1,18 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::Instant;
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::Emitter;
 use tauri::Manager;
 
 static LAUNCH_FILE_PROCESSED: AtomicBool = AtomicBool::new(false);
 static LAUNCH_FILE_PATH: Mutex<Option<String>> = Mutex::new(None);
+
+// 保存时间戳记录（用于过滤自身保存引起的文件变化事件）
+static LAST_SAVE_TIMES: Mutex<Option<HashMap<String, Instant>>> = Mutex::new(None);
 
 // 文件监听器状态
 struct WatcherState {
@@ -196,6 +200,17 @@ fn save_file(path: String, content: String, encoding: Option<String>) -> Result<
     }
 
     fs::write(&path, cow).map_err(|e| e.to_string())?;
+
+    // 记录保存时间，用于过滤自身保存引起的文件变化事件
+    if let Ok(mut times) = LAST_SAVE_TIMES.lock() {
+        if times.is_none() {
+            *times = Some(HashMap::new());
+        }
+        if let Some(ref mut map) = *times {
+            map.insert(path.clone(), Instant::now());
+        }
+    }
+
     Ok(())
 }
 
@@ -223,6 +238,28 @@ fn watch_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
                 if event.kind.is_modify() || event.kind.is_remove() {
                     if let Some(path) = event.paths.first() {
                         let path_str = path.to_string_lossy().to_string();
+
+                        // 检查是否是自身保存引起的修改（500ms内的保存忽略）
+                        if event.kind.is_modify() {
+                            let is_self_save = if let Ok(times) = LAST_SAVE_TIMES.lock() {
+                                if let Some(ref map) = *times {
+                                    if let Some(last_save) = map.get(&path_str) {
+                                        last_save.elapsed().as_millis() < 500
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            };
+
+                            if is_self_save {
+                                return; // 忽略自身保存引起的修改
+                            }
+                        }
+
                         let change_type = if event.kind.is_remove() {
                             "deleted"
                         } else {
