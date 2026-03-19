@@ -1,4 +1,4 @@
-import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save, ask } from "@tauri-apps/plugin-dialog";
@@ -202,8 +202,8 @@ function App() {
     }
   };
 
-  const getExtensions = () => {
-    const baseExtensions = [rectangularSelection(), search(), keymap.of(searchKeymap)];
+  const extensions = useMemo(() => {
+    const baseExtensions: any[] = [rectangularSelection(), search(), keymap.of(searchKeymap)];
     if (wordWrap) {
       baseExtensions.push(EditorView.lineWrapping);
     }
@@ -219,7 +219,7 @@ function App() {
       case 'yaml': return [...baseExtensions, yaml()];
       default: return baseExtensions;
     }
-  };
+  }, [language, wordWrap]);
 
   const handleFormatJson = () => {
     if (!content.trim()) return;
@@ -878,7 +878,7 @@ function App() {
             <CodeMirror
               value={content}
               height="100%"
-              extensions={getExtensions()}
+              extensions={extensions}
               onChange={(val) => updateActiveTab({ content: val })}
               onUpdate={(viewUpdate) => {
                 const head = viewUpdate.state.selection.main.head;

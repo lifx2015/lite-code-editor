@@ -403,7 +403,7 @@ function buildMindmapTree(lines: { level: number; label: string; id: string }[])
   return root;
 }
 
-const EnhancedMarkdown: React.FC<EnhancedMarkdownProps> = ({ content, currentFilePath }) => {
+const EnhancedMarkdown = memo(function EnhancedMarkdown({ content, currentFilePath }: EnhancedMarkdownProps) {
   // 预加载检测到的组件
   React.useEffect(() => {
     preloadDetectedComponents(content);
@@ -533,7 +533,7 @@ const EnhancedMarkdown: React.FC<EnhancedMarkdownProps> = ({ content, currentFil
       {content}
     </ReactMarkdown>
   );
-};
+});
 
 // ============================================
 // 主预览引擎
