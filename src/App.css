@@ -589,6 +589,144 @@ select {
   font-size: 12px;
 }
 
+/* 标签页未保存指示器 */
+.tab-item.unsaved .tab-title {
+  font-style: italic;
+}
+
+.unsaved-indicator {
+  color: var(--accent-color);
+  font-size: 10px;
+  margin-right: 2px;
+}
+
+/* 欢迎页面样式 */
+.welcome-page {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  overflow: auto;
+}
+
+.welcome-content {
+  max-width: 600px;
+  padding: 40px;
+  text-align: center;
+}
+
+.welcome-content h1 {
+  font-size: 2.5em;
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.welcome-subtitle {
+  font-size: 1.1em;
+  color: var(--text-secondary);
+  margin: 0 0 32px;
+}
+
+.welcome-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  margin-bottom: 40px;
+}
+
+.welcome-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  font-size: 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color-strong);
+  color: var(--text-primary);
+}
+
+.welcome-btn:hover {
+  background: var(--bg-input);
+  border-color: var(--accent-color);
+}
+
+.welcome-btn.primary {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
+}
+
+.welcome-btn.primary:hover {
+  background: var(--accent-hover);
+}
+
+.btn-icon {
+  font-size: 18px;
+}
+
+.welcome-section {
+  text-align: left;
+  margin-bottom: 24px;
+  padding: 20px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.welcome-section h3 {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.shortcut {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.shortcut kbd {
+  padding: 4px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color-strong);
+  border-radius: 4px;
+  font-family: SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  min-width: 80px;
+  text-align: center;
+}
+
+.shortcut span {
+  color: var(--text-secondary);
+}
+
+.features-list {
+  margin: 0;
+  padding: 0 0 0 20px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+.features-list li {
+  margin-bottom: 4px;
+}
+
 /* 主题切换按钮样式 */
 .theme-toggle {
   display: flex;
@@ -1612,4 +1750,74 @@ select {
 .info-value {
   font-weight: 500;
   color: var(--text-primary);
+}
+
+/* ============================================
+   脑图组件样式
+   ============================================ */
+
+.mindmap-visualizer {
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin: 12px 0;
+}
+
+.mindmap-container {
+  height: 400px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mindmap-node {
+  transition: fill 0.2s, stroke 0.2s, transform 0.15s;
+}
+
+.mindmap-node:hover {
+  filter: brightness(1.1);
+}
+
+.zoom-info,
+.node-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: 12px;
+  font-family: SFMono-Regular, Consolas, monospace;
+}
+
+/* 脑图全屏模式 */
+.mindmap-visualizer.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  margin: 0;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mindmap-visualizer.fullscreen .mindmap-container {
+  flex: 1;
+  height: auto;
+  border-radius: 0;
+}
+
+.mindmap-visualizer.fullscreen .visualizer-controls {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.mindmap-visualizer.fullscreen .visualizer-description {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-color);
 }

@@ -318,4 +318,11 @@ registerComponents([
     description: '字符串匹配可视化 (朴素匹配、KMP、Boyer-Moore)',
     category: 'algorithm',
   },
+  // 脑图可视化
+  {
+    name: 'mindmap',
+    loader: () => import('../visualizers/mindmap/MindMapVisualizer'),
+    description: '脑图（思维导图）可视化',
+    category: 'diagram',
+  },
 ]);

@@ -83,5 +83,5 @@ export interface ComponentRegistryItem {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   loader: () => Promise<{ default: React.ComponentType<any> }>;
   description?: string;
-  category?: 'algorithm' | 'math' | '3d' | 'physics' | 'external';
+  category?: 'algorithm' | 'math' | '3d' | 'physics' | 'external' | 'diagram';
 }

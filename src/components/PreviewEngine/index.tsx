@@ -307,6 +307,102 @@ function parseObject(str: string, pos: number): { value: Record<string, unknown>
   return { value: obj, newPos: pos };
 }
 
+// ============================================
+// 脑图内容解析
+// ============================================
+
+interface MindMapNode {
+  id: string;
+  label: string;
+  children?: MindMapNode[];
+}
+
+let mindmapIdCounter = 0;
+
+function generateMindmapId(): string {
+  return `mindmap-${++mindmapIdCounter}`;
+}
+
+/**
+ * 解析缩进格式的脑图内容
+ * 支持空格或制表符缩进
+ */
+function parseMindmapContent(content: string): MindMapNode {
+  const lines = content.split('\n').filter(line => line.trim());
+
+  if (lines.length === 0) {
+    return { id: generateMindmapId(), label: '空脑图' };
+  }
+
+  // 解析每一行的缩进级别和文本
+  const parsed = lines.map(line => {
+    // 计算缩进：制表符算1级，每2个空格算1级
+    const indentMatch = line.match(/^(\s*)/);
+    const indent = indentMatch ? indentMatch[1] : '';
+
+    let level = 0;
+    for (const char of indent) {
+      if (char === '\t') {
+        level++;
+      } else if (char === ' ') {
+        // 每2个空格算一级
+        level += 0.5;
+      }
+    }
+    level = Math.floor(level);
+
+    const label = line.trim();
+    return { level, label, id: generateMindmapId() };
+  });
+
+  // 构建树形结构
+  return buildMindmapTree(parsed);
+}
+
+/**
+ * 将解析后的行列表构建为树形结构
+ */
+function buildMindmapTree(lines: { level: number; label: string; id: string }[]): MindMapNode {
+  if (lines.length === 0) {
+    return { id: generateMindmapId(), label: '空节点' };
+  }
+
+  // 第一行是根节点
+  const root: MindMapNode = {
+    id: lines[0].id,
+    label: lines[0].label,
+    children: [],
+  };
+
+  // 使用栈来跟踪当前路径
+  const stack: { node: MindMapNode; level: number }[] = [
+    { node: root, level: 0 }
+  ];
+
+  for (let i = 1; i < lines.length; i++) {
+    const { level, label, id } = lines[i];
+    const newNode: MindMapNode = { id, label, children: [] };
+
+    // 找到合适的父节点
+    while (stack.length > 1 && stack[stack.length - 1].level >= level) {
+      stack.pop();
+    }
+
+    // 添加到父节点的 children
+    const parent = stack[stack.length - 1];
+    if (parent.node.children) {
+      parent.node.children.push(newNode);
+    } else {
+      parent.node.children = [newNode];
+    }
+
+    // 压入栈
+    stack.push({ node: newNode, level });
+  }
+
+  return root;
+}
+
 const EnhancedMarkdown: React.FC<EnhancedMarkdownProps> = ({ content, currentFilePath }) => {
   // 预加载检测到的组件
   React.useEffect(() => {
@@ -356,6 +452,38 @@ const EnhancedMarkdown: React.FC<EnhancedMarkdownProps> = ({ content, currentFil
         const text = typeof children === 'string' ? children : '';
         const id = generateHeadingId(text);
         return <h6 id={id}>{children}</h6>;
+      },
+      // 处理代码块
+      code: ({ node, inline, className, children, ...props }: any) => {
+        // 内联代码直接返回
+        if (inline) {
+          return <code className={className} {...props}>{children}</code>;
+        }
+
+        // 检测语言标识
+        const match = /language-(\w+)/.exec(className || '');
+        const lang = match ? match[1] : '';
+
+        // 处理 mindmap 代码块
+        if (lang === 'mindmap') {
+          const content = String(children).replace(/\n$/, '');
+          const data = parseMindmapContent(content);
+          return (
+            <div className="directive-block">
+              <DirectiveComponent
+                directiveName="mindmap"
+                directiveArgs={{ data }}
+              />
+            </div>
+          );
+        }
+
+        // 其他代码块按标准方式渲染
+        return (
+          <pre>
+            <code className={className} {...props}>{children}</code>
+          </pre>
+        );
       },
       // 处理段落节点（检测指令）
       p: ({ children }: any) => {

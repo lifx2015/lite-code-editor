@@ -18,6 +18,21 @@ struct WatcherState {
 
 static FILE_WATCHER: Mutex<Option<WatcherState>> = Mutex::new(None);
 
+// 获取缓存目录路径
+fn get_cache_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    let cache_dir = app_data_dir.join("unsaved_cache");
+
+    // 确保目录存在
+    if !cache_dir.exists() {
+        fs::create_dir_all(&cache_dir)
+            .map_err(|e| format!("Failed to create cache dir: {}", e))?;
+    }
+
+    Ok(cache_dir)
+}
+
 #[derive(serde::Serialize)]
 struct ExternalPluginDescriptor {
     path: String,
@@ -254,6 +269,95 @@ fn unwatch_file(path: String) -> Result<(), String> {
     Ok(())
 }
 
+// ========== 缓存文件管理 ==========
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CacheFileInfo {
+    id: String,
+    title: String,
+    content: String,
+    language: String,
+}
+
+/// 保存缓存文件（用于未保存的新文件）
+#[tauri::command]
+fn save_cache_file(app: tauri::AppHandle, id: String, title: String, content: String, language: String) -> Result<(), String> {
+    let cache_dir = get_cache_dir(&app)?;
+    let cache_file = cache_dir.join(format!("{}.json", id));
+
+    let info = CacheFileInfo {
+        id,
+        title,
+        content,
+        language,
+    };
+
+    let json = serde_json::to_string_pretty(&info)
+        .map_err(|e| format!("Failed to serialize cache: {}", e))?;
+
+    fs::write(&cache_file, json)
+        .map_err(|e| format!("Failed to write cache file: {}", e))?;
+
+    Ok(())
+}
+
+/// 删除缓存文件
+#[tauri::command]
+fn delete_cache_file(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let cache_dir = get_cache_dir(&app)?;
+    let cache_file = cache_dir.join(format!("{}.json", id));
+
+    if cache_file.exists() {
+        fs::remove_file(&cache_file)
+            .map_err(|e| format!("Failed to delete cache file: {}", e))?;
+    }
+
+    Ok(())
+}
+
+/// 获取所有缓存文件
+#[tauri::command]
+fn get_all_cache_files(app: tauri::AppHandle) -> Result<Vec<CacheFileInfo>, String> {
+    let cache_dir = get_cache_dir(&app)?;
+    let mut files = Vec::new();
+
+    if !cache_dir.exists() {
+        return Ok(files);
+    }
+
+    let entries = fs::read_dir(&cache_dir)
+        .map_err(|e| format!("Failed to read cache dir: {}", e))?;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().map_or(false, |ext| ext == "json") {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(info) = serde_json::from_str::<CacheFileInfo>(&content) {
+                    files.push(info);
+                }
+            }
+        }
+    }
+
+    Ok(files)
+}
+
+/// 清除所有缓存文件
+#[tauri::command]
+fn clear_all_cache_files(app: tauri::AppHandle) -> Result<(), String> {
+    let cache_dir = get_cache_dir(&app)?;
+
+    if cache_dir.exists() {
+        fs::remove_dir_all(&cache_dir)
+            .map_err(|e| format!("Failed to clear cache dir: {}", e))?;
+        // 重新创建空目录
+        fs::create_dir_all(&cache_dir)
+            .map_err(|e| format!("Failed to recreate cache dir: {}", e))?;
+    }
+
+    Ok(())
+}
+
 /// 从命令行参数中提取文件路径
 fn extract_file_path_from_args() -> Option<String> {
     std::env::args_os().skip(1).find_map(|arg| {
@@ -313,7 +417,11 @@ pub fn run() {
             unwatch_file,
             get_plugin_dirs,
             list_external_plugins,
-            read_external_plugin_file
+            read_external_plugin_file,
+            save_cache_file,
+            delete_cache_file,
+            get_all_cache_files,
+            clear_all_cache_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -17,7 +17,8 @@
         "width": 900,
         "height": 650,
         "visible": true,
-        "decorations": true
+        "decorations": true,
+        "devtools": true
       }
     ],
     "security": {

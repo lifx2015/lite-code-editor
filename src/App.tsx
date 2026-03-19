@@ -1,7 +1,7 @@
 import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { open, save, ask } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
@@ -29,15 +29,21 @@ type EditorTab = {
   encoding: string;
   language: string;
   externallyModified: boolean;
+  savedContent: string; // 用于跟踪保存状态，检测是否有未保存的修改
 };
 
 type ThemeMode = "system" | "light" | "dark";
 
+type CacheFileInfo = {
+  id: string;
+  title: string;
+  content: string;
+  language: string;
+};
+
 function App() {
-  const [tabs, setTabs] = useState<EditorTab[]>([
-    { id: "tab-initial", title: "Untitled1", path: null, content: "", encoding: "UTF-8", language: "markdown", externallyModified: false }
-  ]);
-  const [activeTabId, setActiveTabId] = useState<string>("tab-initial");
+  const [tabs, setTabs] = useState<EditorTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string>("");
   const [viewMode, setViewMode] = useState<"edit" | "preview" | "split">("edit");
   const [previewMode, setPreviewMode] = useState<PreviewMode>(() => {
     const saved = localStorage.getItem("previewMode");
@@ -60,6 +66,8 @@ function App() {
   const editorPaneRef = useRef<HTMLDivElement | null>(null);
   const floatingScrollRef = useRef<HTMLDivElement | null>(null);
   const floatingScrollContentRef = useRef<HTMLDivElement | null>(null);
+  const tabsRef = useRef<EditorTab[]>(tabs);
+  tabsRef.current = tabs; // 保持 tabs 引用最新
 
   // 计算当前实际主题
   const currentTheme = themeMode === "system" ? systemTheme : themeMode;
@@ -100,7 +108,7 @@ function App() {
         targetTabId = existed.id;
         return prev.map((tab) =>
           tab.id === existed.id
-            ? { ...tab, content: result.content, encoding: result.encoding, language: nextLanguage, title: toTabTitle(path), externallyModified: false }
+            ? { ...tab, content: result.content, encoding: result.encoding, language: nextLanguage, title: toTabTitle(path), externallyModified: false, savedContent: result.content }
             : tab
         );
       }
@@ -114,6 +122,7 @@ function App() {
         encoding: result.encoding,
         language: nextLanguage,
         externallyModified: false,
+        savedContent: result.content,
       };
       return [...prev, nextTab];
     });
@@ -178,7 +187,13 @@ function App() {
             console.error("Failed to watch file:", error);
           }
         }
-        updateActiveTab({ path, title: toTabTitle(path), externallyModified: false });
+        // 保存成功后删除缓存文件
+        try {
+          await invoke("delete_cache_file", { id: activeTab.id });
+        } catch (error) {
+          console.error("Failed to delete cache:", error);
+        }
+        updateActiveTab({ path, title: toTabTitle(path), externallyModified: false, savedContent: content });
         setStatusMessage("保存成功");
       }
     } catch (error) {
@@ -226,6 +241,7 @@ function App() {
         content: result.content,
         encoding: result.encoding,
         externallyModified: false,
+        savedContent: result.content,
       });
       setStatusMessage("文件已刷新");
     } catch (error) {
@@ -298,6 +314,93 @@ function App() {
     });
   }, []);
 
+  // 加载缓存文件（应用启动时）
+  useEffect(() => {
+    const loadCacheFiles = async () => {
+      try {
+        const cacheFiles: CacheFileInfo[] = await invoke("get_all_cache_files");
+        if (cacheFiles.length > 0) {
+          setTabs((prev) => {
+            // 过滤掉初始空标签
+            const existingTabs = prev.filter(tab => tab.content.length > 0 || tab.path);
+            const cacheTabs: EditorTab[] = cacheFiles.map((cache) => ({
+              id: cache.id,
+              title: cache.title,
+              path: null,
+              content: cache.content,
+              encoding: "UTF-8",
+              language: cache.language,
+              externallyModified: false,
+              savedContent: "", // 缓存文件本身就有内容，但与磁盘不同
+            }));
+            // 如果没有现有标签，使用缓存标签
+            if (existingTabs.length === 0 && cacheTabs.length > 0) {
+              setActiveTabId(cacheTabs[0].id);
+              return cacheTabs;
+            }
+            // 否则追加缓存标签
+            return [...existingTabs, ...cacheTabs];
+          });
+          setStatusMessage(`已恢复 ${cacheFiles.length} 个未保存的文件`);
+        }
+      } catch (error) {
+        console.error("Failed to load cache files:", error);
+      }
+    };
+    void loadCacheFiles();
+  }, []);
+
+  // 自动保存（防抖）
+  useEffect(() => {
+    const autoSaveTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
+    const performAutoSave = async (tab: EditorTab) => {
+      // 只保存有修改的文件
+      if (tab.content === tab.savedContent) return;
+
+      try {
+        if (tab.path) {
+          // 已保存的文件：直接保存
+          await invoke("save_file", { path: tab.path, content: tab.content, encoding: tab.encoding });
+          // 更新 savedContent
+          setTabs((prev) => prev.map((t) =>
+            t.id === tab.id ? { ...t, savedContent: tab.content } : t
+          ));
+        } else if (tab.content.length > 0) {
+          // 新文件：保存到缓存
+          await invoke("save_cache_file", {
+            id: tab.id,
+            title: tab.title,
+            content: tab.content,
+            language: tab.language,
+          });
+        }
+      } catch (error) {
+        console.error("Auto-save failed:", error);
+      }
+    };
+
+    // 为每个有修改的 tab 设置自动保存
+    tabs.forEach((tab) => {
+      if (tab.content !== tab.savedContent && tab.content.length > 0) {
+        // 清除之前的定时器
+        const existingTimer = autoSaveTimers.get(tab.id);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+        // 设置新的定时器（2秒后自动保存）
+        const timer = setTimeout(() => {
+          void performAutoSave(tab);
+        }, 2000);
+        autoSaveTimers.set(tab.id, timer);
+      }
+    });
+
+    return () => {
+      autoSaveTimers.forEach((timer) => clearTimeout(timer));
+    };
+  }, [tabs]);
+
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
 
@@ -362,6 +465,7 @@ function App() {
     };
   }, []);
 
+  
   useEffect(() => {
     setCursorLine(1);
     setCursorCol(1);
@@ -464,9 +568,45 @@ function App() {
 
   const closeTab = async (tabId: string) => {
     const tabToClose = tabs.find((tab) => tab.id === tabId);
+    if (!tabToClose) return;
+
+    // 检查是否有未保存的修改
+    const hasUnsavedChanges = tabToClose.content !== tabToClose.savedContent;
+    if (hasUnsavedChanges) {
+      const confirmed = await ask(`文件 "${tabToClose.title}" 有未保存的修改，是否保存？`, {
+        title: "未保存的修改",
+        kind: "warning",
+        okLabel: "保存",
+        cancelLabel: "不保存",
+      });
+      if (confirmed) {
+        // 用户选择保存，先保存再关闭
+        const originalActiveId = activeTabId;
+        setActiveTabId(tabId); // 切换到要保存的标签页
+        await handleSaveFile();
+        // 保存后继续关闭流程
+        if (tabId !== originalActiveId) {
+          setActiveTabId(originalActiveId);
+        }
+      } else {
+        // 用户选择不保存，删除缓存文件
+        try {
+          await invoke("delete_cache_file", { id: tabId });
+        } catch (error) {
+          console.error("Failed to delete cache:", error);
+        }
+      }
+    } else {
+      // 没有未保存的修改，删除缓存文件（如果有的话）
+      try {
+        await invoke("delete_cache_file", { id: tabId });
+      } catch (error) {
+        console.error("Failed to delete cache:", error);
+      }
+    }
 
     // 如果关闭的标签页有文件路径，检查是否需要停止监听
-    if (tabToClose?.path) {
+    if (tabToClose.path) {
       const otherTabsWithPath = tabs.filter(
         (tab) => tab.id !== tabId && tab.path === tabToClose.path
       );
@@ -491,6 +631,7 @@ function App() {
           encoding: "UTF-8",
           language: "text",
           externallyModified: false,
+          savedContent: "",
         };
         setActiveTabId(replacement.id);
         return [replacement];
@@ -518,6 +659,7 @@ function App() {
       encoding: "UTF-8",
       language: "text",
       externallyModified: false,
+      savedContent: "",
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newId);
@@ -690,26 +832,30 @@ function App() {
         </div>
       </div>
       <div className="tab-bar">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            className={`tab-item ${tab.id === activeTabId ? "active" : ""} ${tab.externallyModified ? "modified-externally" : ""}`}
-            onClick={() => setActiveTabId(tab.id)}
-            title={tab.path || tab.title}
-          >
-            {tab.externallyModified && <span className="modified-indicator">⚠</span>}
-            <span className="tab-title">{tab.title}</span>
-            <span
-              className="tab-close"
-              onClick={(event) => {
-                event.stopPropagation();
-                void closeTab(tab.id);
-              }}
+        {tabs.map((tab) => {
+          const isDirty = tab.content !== tab.savedContent;
+          return (
+            <button
+              key={tab.id}
+              className={`tab-item ${tab.id === activeTabId ? "active" : ""} ${tab.externallyModified ? "modified-externally" : ""} ${isDirty ? "unsaved" : ""}`}
+              onClick={() => setActiveTabId(tab.id)}
+              title={tab.path || tab.title}
             >
-              ×
-            </span>
-          </button>
-        ))}
+              {tab.externallyModified && <span className="modified-indicator">⚠</span>}
+              {isDirty && !tab.externallyModified && <span className="unsaved-indicator">●</span>}
+              <span className="tab-title">{tab.title}</span>
+              <span
+                className="tab-close"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void closeTab(tab.id);
+                }}
+              >
+                ×
+              </span>
+            </button>
+          );
+        })}
         <button
           className="tab-item tab-add"
           onClick={createNewTab}
@@ -728,7 +874,54 @@ function App() {
         </div>
       )}
 
-      <div className={`editor-area mode-${viewMode}`} style={editorStyle}>
+      {/* 欢迎页面 */}
+      {tabs.length === 0 && (
+        <div className="welcome-page">
+          <div className="welcome-content">
+            <h1>Lite Code Editor</h1>
+            <p className="welcome-subtitle">轻量级代码编辑器</p>
+
+            <div className="welcome-actions">
+              <button className="welcome-btn primary" onClick={createNewTab}>
+                <span className="btn-icon">📄</span>
+                新建文件
+              </button>
+              <button className="welcome-btn" onClick={handleOpenFile}>
+                <span className="btn-icon">📂</span>
+                打开文件
+              </button>
+            </div>
+
+            <div className="welcome-section">
+              <h3>快捷键</h3>
+              <div className="shortcuts-grid">
+                <div className="shortcut"><kbd>Ctrl+N</kbd><span>新建文件</span></div>
+                <div className="shortcut"><kbd>Ctrl+O</kbd><span>打开文件</span></div>
+                <div className="shortcut"><kbd>Ctrl+S</kbd><span>保存文件</span></div>
+                <div className="shortcut"><kbd>Ctrl+W</kbd><span>关闭标签</span></div>
+                <div className="shortcut"><kbd>Ctrl+滚轮</kbd><span>缩放字体</span></div>
+                <div className="shortcut"><kbd>Ctrl+/-</kbd><span>调整字体</span></div>
+              </div>
+            </div>
+
+            <div className="welcome-section">
+              <h3>特性</h3>
+              <ul className="features-list">
+                <li>支持 Markdown 实时预览（标准/增强模式）</li>
+                <li>支持多种编程语言语法高亮</li>
+                <li>自动保存：已保存文件自动保存，新文件缓存恢复</li>
+                <li>文件外部修改检测</li>
+                <li>算法可视化组件支持</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 编辑器区域 */}
+      {tabs.length > 0 && (
+        <>
+        <div className={`editor-area mode-${viewMode}`} style={editorStyle}>
         {(viewMode === 'edit' || viewMode === 'split') && (
           <div className="editor-pane" ref={editorPaneRef}>
             <CodeMirror
@@ -812,6 +1005,8 @@ function App() {
           <div className="status-segment status-readout">{zoomPercent}%</div>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }
