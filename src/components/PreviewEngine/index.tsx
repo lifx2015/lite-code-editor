@@ -10,6 +10,7 @@ import type { PluggableList } from 'unified';
 
 import { loadComponent, preloadDetectedComponents } from '../../plugins/component-registry';
 import type { DirectiveConfig } from '../../core/types/directive';
+import MermaidDiagram from '../MermaidDiagram';
 
 // ============================================
 // 类型定义
@@ -474,6 +475,16 @@ const EnhancedMarkdown = memo(function EnhancedMarkdown({ content, currentFilePa
                 directiveName="mindmap"
                 directiveArgs={{ data }}
               />
+            </div>
+          );
+        }
+
+        // 处理 mermaid 流程图代码块
+        if (lang === 'mermaid') {
+          const chart = String(children).replace(/\n$/, '');
+          return (
+            <div className="mermaid-block">
+              <MermaidDiagram chart={chart} />
             </div>
           );
         }

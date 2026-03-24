@@ -14,11 +14,16 @@
     "fs:allow-appdata-read-recursive",
     "fs:allow-read-dir",
     "fs:allow-read-text-file",
+    "fs:allow-write-file",
     {
       "identifier": "fs:scope",
       "allow": [
         "$APPDATA/plugins/**",
-        "$RESOURCE/plugins/**"
+        "$RESOURCE/plugins/**",
+        "$DOWNLOAD/**",
+        "$DOCUMENT/**",
+        "$DESKTOP/**",
+        "$HOME/**"
       ]
     }
   ]

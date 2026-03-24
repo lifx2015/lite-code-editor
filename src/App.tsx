@@ -14,7 +14,7 @@ import { sql } from "@codemirror/lang-sql";
 import { java } from "@codemirror/lang-java";
 import { yaml } from "@codemirror/lang-yaml";
 import { search, searchKeymap } from "@codemirror/search";
-import { rectangularSelection, EditorView, keymap } from "@codemirror/view";
+import { rectangularSelection, EditorView, keymap, hoverTooltip } from "@codemirror/view";
 import { oneDark } from "@codemirror/theme-one-dark";
 import PreviewEngine, { type PreviewMode, type PreviewEngineRef } from "./components/PreviewEngine";
 import Toc from "./components/Toc";
@@ -39,6 +39,15 @@ type CacheFileInfo = {
   title: string;
   content: string;
   language: string;
+};
+
+// 检测字符串是否是图片URL
+const isImageUrl = (str: string): boolean => {
+  if (!str || typeof str !== 'string') return false;
+  // 支持 http/https/data:image 协议
+  const imagePattern = /^(https?:\/\/.*\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?.*)?)$/i;
+  const dataImagePattern = /^data:image\/(jpg|jpeg|png|gif|webp|svg\+xml|bmp);base64,/i;
+  return imagePattern.test(str) || dataImagePattern.test(str);
 };
 
 function App() {
@@ -202,25 +211,6 @@ function App() {
     }
   };
 
-  const extensions = useMemo(() => {
-    const baseExtensions: any[] = [rectangularSelection(), search(), keymap.of(searchKeymap)];
-    if (wordWrap) {
-      baseExtensions.push(EditorView.lineWrapping);
-    }
-    switch (language) {
-      case 'markdown': return [...baseExtensions, markdown()];
-      case 'javascript': return [...baseExtensions, javascript({ jsx: true, typescript: true })];
-      case 'json': return [...baseExtensions, json()];
-      case 'css': return [...baseExtensions, css()];
-      case 'html': return [...baseExtensions, html()];
-      case 'python': return [...baseExtensions, python()];
-      case 'sql': return [...baseExtensions, sql()];
-      case 'java': return [...baseExtensions, java()];
-      case 'yaml': return [...baseExtensions, yaml()];
-      default: return baseExtensions;
-    }
-  }, [language, wordWrap]);
-
   const handleFormatJson = () => {
     if (!content.trim()) return;
     try {
@@ -232,6 +222,86 @@ function App() {
       setStatusMessage("JSON 格式错误: " + (error as Error).message);
     }
   };
+
+  // JSON图片URL悬停预览扩展
+  const jsonImageHoverExtension = useMemo(() => {
+    if (language !== 'json') return null;
+
+    return hoverTooltip((view, pos) => {
+      const { from, text } = view.state.doc.lineAt(pos);
+      const lineText = text;
+      const cursorPos = pos - from;
+
+      // 查找JSON字符串值 (在冒号后面的引号内容)
+      const colonIndex = lineText.indexOf(':');
+      if (colonIndex === -1 || cursorPos <= colonIndex) return null;
+
+      // 查找光标所在的字符串
+      let stringStart = -1;
+      let stringEnd = -1;
+      let inString = false;
+
+      for (let i = colonIndex + 1; i < lineText.length; i++) {
+        const char = lineText[i];
+        if (char === '"' && (i === 0 || lineText[i - 1] !== '\\')) {
+          if (!inString) {
+            inString = true;
+            stringStart = i;
+          } else {
+            stringEnd = i;
+            break;
+          }
+        }
+      }
+
+      if (stringStart === -1 || stringEnd === -1) return null;
+      if (cursorPos < stringStart || cursorPos > stringEnd) return null;
+
+      // 提取字符串内容
+      const rawString = lineText.slice(stringStart + 1, stringEnd);
+      // 处理转义字符
+      const url = rawString.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+
+      if (!isImageUrl(url)) return null;
+
+      return {
+        pos: from + stringStart,
+        end: from + stringEnd + 1,
+        above: true,
+        create() {
+          const dom = document.createElement('div');
+          dom.className = 'json-image-tooltip';
+          const img = document.createElement('img');
+          img.src = url;
+          img.style.cssText = 'max-width: 300px; max-height: 200px; border-radius: 6px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);';
+          img.onerror = () => {
+            dom.innerHTML = '<span style="color: #ef4444; padding: 8px;">图片加载失败</span>';
+          };
+          dom.appendChild(img);
+          return { dom };
+        }
+      };
+    }, { hoverTime: 300 });
+  }, [language]);
+
+  const extensions = useMemo(() => {
+    const baseExtensions: any[] = [rectangularSelection(), search(), keymap.of(searchKeymap)];
+    if (wordWrap) {
+      baseExtensions.push(EditorView.lineWrapping);
+    }
+    switch (language) {
+      case 'markdown': return [...baseExtensions, markdown()];
+      case 'javascript': return [...baseExtensions, javascript({ jsx: true, typescript: true })];
+      case 'json': return jsonImageHoverExtension ? [...baseExtensions, json(), jsonImageHoverExtension] : [...baseExtensions, json()];
+      case 'css': return [...baseExtensions, css()];
+      case 'html': return [...baseExtensions, html()];
+      case 'python': return [...baseExtensions, python()];
+      case 'sql': return [...baseExtensions, sql()];
+      case 'java': return [...baseExtensions, java()];
+      case 'yaml': return [...baseExtensions, yaml()];
+      default: return baseExtensions;
+    }
+  }, [language, wordWrap, jsonImageHoverExtension]);
 
   const handleRefreshFile = async () => {
     if (!activeTab?.path) return;

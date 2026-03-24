@@ -214,6 +214,12 @@ fn save_file(path: String, content: String, encoding: Option<String>) -> Result<
     Ok(())
 }
 
+#[tauri::command]
+fn save_binary_file(path: String, data: Vec<u8>) -> Result<(), String> {
+    fs::write(&path, data).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// 获取启动时通过命令行参数传入的文件路径（仅返回一次）
 #[tauri::command]
 fn take_launch_file_path() -> Option<String> {
@@ -449,6 +455,7 @@ pub fn run() {
             greet,
             load_file,
             save_file,
+            save_binary_file,
             take_launch_file_path,
             watch_file,
             unwatch_file,

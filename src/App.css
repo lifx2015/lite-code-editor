@@ -1821,3 +1821,27 @@ select {
   background: var(--bg-tertiary);
   border-top: 1px solid var(--border-color);
 }
+
+/* ============================================
+   JSON 图片预览 Tooltip 样式
+   ============================================ */
+
+.cm-tooltip.json-image-tooltip {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color-strong);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+}
+
+.json-image-tooltip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.json-image-tooltip img {
+  display: block;
+  object-fit: contain;
+}
