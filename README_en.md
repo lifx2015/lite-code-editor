@@ -5,7 +5,8 @@ A lightweight text editor built with Tauri, focused on simplicity and efficiency
 English | **[中文](./README.md)**
 
 ![lite-code-editor Screenshot](./screenshot.png)
-
+![lite-code-editor 截图](./demo3.png)
+![lite-code-editor 截图](./demo1.png)
 ## Features
 
 ### Editing

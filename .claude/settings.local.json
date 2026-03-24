@@ -6,7 +6,9 @@
       "Bash(findstr /i \"tauri-app\")",
       "Bash(npm run:*)",
       "Bash(taskkill //f //im tauri-app.exe 2)",
-      "Bash(/dev/null cd:*)"
+      "Bash(/dev/null cd:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
