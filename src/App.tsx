@@ -6,7 +6,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
+import { bracketMatching } from "@codemirror/language";
+import { json, jsonParseLinter } from "@codemirror/lang-json";
 import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
 import { python } from "@codemirror/lang-python";
@@ -15,7 +16,10 @@ import { java } from "@codemirror/lang-java";
 import { yaml } from "@codemirror/lang-yaml";
 import { search, searchKeymap } from "@codemirror/search";
 import { rectangularSelection, EditorView, keymap, hoverTooltip } from "@codemirror/view";
+import { linter, type Diagnostic } from "@codemirror/lint";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { StateField, StateEffect } from "@codemirror/state";
+import { Decoration, type DecorationSet, WidgetType } from "@codemirror/view";
 import PreviewEngine, { type PreviewMode, type PreviewEngineRef } from "./components/PreviewEngine";
 import Toc from "./components/Toc";
 import { initializeExternalPlugins } from "./plugins/component-registry";
@@ -48,6 +52,74 @@ const isImageUrl = (str: string): boolean => {
   const imagePattern = /^(https?:\/\/.*\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?.*)?)$/i;
   const dataImagePattern = /^data:image\/(jpg|jpeg|png|gif|webp|svg\+xml|bmp);base64,/i;
   return imagePattern.test(str) || dataImagePattern.test(str);
+};
+
+// JSON 错误标记 Widget - 在错误位置显示红色图标
+class ErrorMarkerWidget extends WidgetType {
+  constructor(private message: string) {
+    super();
+  }
+
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = 'json-error-marker';
+    span.textContent = '❌';
+    span.title = this.message;
+    return span;
+  }
+
+  ignoreEvent() {
+    return false;
+  }
+}
+
+// 创建错误标记装饰
+const createErrorDecorations = (diagnostics: readonly Diagnostic[]): DecorationSet => {
+  const decorations: any[] = [];
+  diagnostics.forEach((d) => {
+    if (d.severity === 'error') {
+      decorations.push(
+        Decoration.widget({
+          widget: new ErrorMarkerWidget(d.message),
+          side: 1,
+        }).range(d.to)
+      );
+    }
+  });
+  return Decoration.set(decorations);
+};
+
+// 错误标记状态字段
+const errorMarkerField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none;
+  },
+  update(decorations, tr) {
+    // 检查是否有新的诊断信息
+    for (const effect of tr.effects) {
+      if (effect.is(setDiagnosticsEffect)) {
+        return createErrorDecorations(effect.value);
+      }
+    }
+    return decorations.map(tr.changes);
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+// 设置诊断信息的 effect
+const setDiagnosticsEffect = StateEffect.define<readonly Diagnostic[]>();
+
+// 自定义 JSON linter，同时触发错误标记
+const jsonLinterWithMarkers = () => {
+  const baseLinter = jsonParseLinter();
+  return (view: EditorView): Diagnostic[] => {
+    const diagnostics = baseLinter(view);
+    // 触发错误标记更新
+    view.dispatch({
+      effects: setDiagnosticsEffect.of(diagnostics),
+    });
+    return diagnostics;
+  };
 };
 
 function App() {
@@ -232,30 +304,38 @@ function App() {
       const lineText = text;
       const cursorPos = pos - from;
 
-      // 查找JSON字符串值 (在冒号后面的引号内容)
-      const colonIndex = lineText.indexOf(':');
-      if (colonIndex === -1 || cursorPos <= colonIndex) return null;
-
-      // 查找光标所在的字符串
+      // 查找光标所在的字符串（支持对象属性值和数组元素）
       let stringStart = -1;
       let stringEnd = -1;
-      let inString = false;
 
-      for (let i = colonIndex + 1; i < lineText.length; i++) {
+      // 遍历整行查找光标所在的引号字符串
+      for (let i = 0; i < lineText.length; i++) {
         const char = lineText[i];
         if (char === '"' && (i === 0 || lineText[i - 1] !== '\\')) {
-          if (!inString) {
-            inString = true;
+          if (stringStart === -1) {
             stringStart = i;
           } else {
             stringEnd = i;
-            break;
+            // 检查光标是否在这个字符串范围内
+            if (cursorPos >= stringStart && cursorPos <= stringEnd) {
+              break;
+            }
+            // 不在范围内，继续查找下一个字符串
+            stringStart = -1;
+            stringEnd = -1;
           }
         }
       }
 
       if (stringStart === -1 || stringEnd === -1) return null;
       if (cursorPos < stringStart || cursorPos > stringEnd) return null;
+
+      // 检查这个字符串是否是值（不是键）
+      // 键后面会有冒号，值后面会有逗号或右括号
+      const afterString = lineText.slice(stringEnd + 1).trim();
+
+      // 如果字符串后面紧跟冒号，说明这是键，不是值，跳过
+      if (afterString.startsWith(':')) return null;
 
       // 提取字符串内容
       const rawString = lineText.slice(stringStart + 1, stringEnd);
@@ -285,14 +365,25 @@ function App() {
   }, [language]);
 
   const extensions = useMemo(() => {
-    const baseExtensions: any[] = [rectangularSelection(), search(), keymap.of(searchKeymap)];
+    const baseExtensions: any[] = [bracketMatching(), rectangularSelection(), search(), keymap.of(searchKeymap)];
     if (wordWrap) {
       baseExtensions.push(EditorView.lineWrapping);
     }
     switch (language) {
       case 'markdown': return [...baseExtensions, markdown()];
       case 'javascript': return [...baseExtensions, javascript({ jsx: true, typescript: true })];
-      case 'json': return jsonImageHoverExtension ? [...baseExtensions, json(), jsonImageHoverExtension] : [...baseExtensions, json()];
+      case 'json': {
+        const jsonExtensions = [
+          ...baseExtensions,
+          json(),
+          errorMarkerField,
+          linter(jsonLinterWithMarkers()),
+        ];
+        if (jsonImageHoverExtension) {
+          jsonExtensions.push(jsonImageHoverExtension);
+        }
+        return jsonExtensions;
+      }
       case 'css': return [...baseExtensions, css()];
       case 'html': return [...baseExtensions, html()];
       case 'python': return [...baseExtensions, python()];

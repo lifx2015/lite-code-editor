@@ -1823,6 +1823,82 @@ select {
 }
 
 /* ============================================
+   任务列表（Todo）样式
+   ============================================ */
+
+/* 任务列表基础样式 */
+.markdown-body ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+
+.markdown-body li.task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+/* 自定义复选框样式 */
+.markdown-body input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  margin-top: 4px;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  border: 1.5px solid var(--border-color-strong);
+  border-radius: 3px;
+  background-color: var(--bg-input);
+  position: relative;
+  transition: all 0.15s;
+}
+
+/* 已选中的复选框 - 绿色背景和对号 */
+.markdown-body input[type="checkbox"]:checked {
+  background-color: #10b981;
+  border-color: #10b981;
+}
+
+/* 绘制绿色对号 */
+.markdown-body input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1.5px;
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* 已完成的待办项 - 灰色文字 */
+.markdown-body li.task-list-item:has(input[type="checkbox"]:checked) {
+  color: #9ca3af;
+  text-decoration: line-through;
+  text-decoration-color: #9ca3af;
+}
+
+/* 暗色主题下的任务列表样式 */
+[data-theme="dark"] .markdown-body input[type="checkbox"] {
+  border-color: #4a4a4d;
+  background-color: #3c3c3c;
+}
+
+[data-theme="dark"] .markdown-body input[type="checkbox"]:checked {
+  background-color: #34d399;
+  border-color: #34d399;
+}
+
+[data-theme="dark"] .markdown-body li.task-list-item:has(input[type="checkbox"]:checked) {
+  color: #6b7280;
+  text-decoration-color: #6b7280;
+}
+
+/* ============================================
    JSON 图片预览 Tooltip 样式
    ============================================ */
 
@@ -1844,4 +1920,101 @@ select {
 .json-image-tooltip img {
   display: block;
   object-fit: contain;
+}
+
+/* ============================================
+   CodeMirror Lint 样式（JSON语法错误提示）
+   ============================================ */
+
+.cm-lintRange-error {
+  background-color: rgba(239, 68, 68, 0.8);
+  border-bottom: 6px wavy #ef4444;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.6) inset, 0 0 8px rgba(239, 68, 68, 0.4);
+  animation: pulse-error 1.5s ease-in-out infinite;
+}
+
+.cm-lintRange-warning {
+  background-color: rgba(234, 179, 8, 0.8);
+  border-bottom: 6px wavy #eab308;
+  box-shadow: 0 0 12px rgba(234, 179, 8, 0.6) inset, 0 0 8px rgba(234, 179, 8, 0.4);
+  animation: pulse-warning 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-error {
+  0%, 100% {
+    background-color: rgba(239, 68, 68, 0.8);
+  }
+  50% {
+    background-color: rgba(239, 68, 68, 1);
+  }
+}
+
+@keyframes pulse-warning {
+  0%, 100% {
+    background-color: rgba(234, 179, 8, 0.8);
+  }
+  50% {
+    background-color: rgba(234, 179, 8, 1);
+  }
+}
+
+/* JSON 错误标记样式 - 在错误位置直接显示 */
+.json-error-marker {
+  display: inline-block;
+  font-size: 16px;
+  margin-left: 4px;
+  cursor: help;
+  animation: bounce 0.6s ease infinite alternate;
+  filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.8));
+}
+
+@keyframes bounce {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-3px);
+  }
+}
+
+.cm-lint-marker-error {
+  font-size: 36px !important;
+  color: #ef4444 !important;
+}
+
+.cm-lint-marker-warning {
+  font-size: 36px !important;
+  color: #eab308 !important;
+}
+
+.cm-tooltip-lint {
+  background: var(--bg-primary);
+  border: 2px solid #ef4444;
+  border-radius: 8px;
+  padding: 10px 14px;
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.3);
+  font-size: 14px;
+  font-weight: 500;
+  max-width: 500px;
+  z-index: 100;
+}
+
+.cm-diagnostic-error {
+  color: #ef4444;
+}
+
+.cm-diagnostic-warning {
+  color: #eab308;
+}
+
+[data-theme="dark"] .cm-lintRange-error {
+  background-color: rgba(239, 68, 68, 0.45);
+}
+
+[data-theme="dark"] .cm-lintRange-warning {
+  background-color: rgba(234, 179, 8, 0.45);
+}
+
+[data-theme="dark"] .cm-tooltip-lint {
+  background: var(--bg-secondary);
 }

@@ -6,7 +6,7 @@
 import React, { Suspense, useMemo, memo, forwardRef, useImperativeHandle, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { PluggableList } from 'unified';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 import { loadComponent, preloadDetectedComponents } from '../../plugins/component-registry';
 import type { DirectiveConfig } from '../../core/types/directive';
@@ -33,6 +33,34 @@ interface DirectiveComponentProps {
   directiveName: string;
   directiveArgs: DirectiveConfig;
 }
+
+// 自定义链接组件（使用默认浏览器打开）
+const MarkdownLink: React.FC<{
+  href?: string;
+  children?: React.ReactNode;
+  title?: string;
+}> = ({ href, children, title }) => {
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    if (href) {
+      // 检测是否在 Tauri 环境
+      const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
+      if (isTauri) {
+        openUrl(href).catch((err) => {
+          console.error('Failed to open URL:', err);
+        });
+      } else {
+        window.open(href, '_blank', 'noopener,noreferrer');
+      }
+    }
+  };
+
+  return (
+    <a href={href} title={title} onClick={handleClick}>
+      {children}
+    </a>
+  );
+};
 
 // ============================================
 // 标题 ID 生成
@@ -411,7 +439,7 @@ const EnhancedMarkdown = memo(function EnhancedMarkdown({ content, currentFilePa
   }, [content]);
 
   // 配置 remark 插件
-  const remarkPlugins: PluggableList = useMemo(
+  const remarkPlugins = useMemo(
     () => [remarkGfm],
     []
   );
@@ -423,6 +451,8 @@ const EnhancedMarkdown = memo(function EnhancedMarkdown({ content, currentFilePa
       img: ({ node, ...props }: any) => (
         <MarkdownImage {...props} currentFilePath={currentFilePath} />
       ),
+      // 链接组件 - 使用默认浏览器打开
+      a: MarkdownLink,
       // 标题组件（添加 ID）
       h1: ({ children }: any) => {
         const text = typeof children === 'string' ? children : '';
@@ -607,6 +637,7 @@ const PreviewEngine = forwardRef<PreviewEngineRef, PreviewEngineProps>(
                 img: ({ node, ...props }: any) => (
                   <MarkdownImage {...props} currentFilePath={currentFilePath} />
                 ),
+                a: MarkdownLink,
                 ...headingComponents,
               }}
             >

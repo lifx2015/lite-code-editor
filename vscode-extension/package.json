@@ -1,0 +1,43 @@
+{
+  "name": "lite-code-markdown-preview",
+  "displayName": "Lite Code Markdown Preview",
+  "description": "Press Ctrl+M to open Markdown preview for the current .md file",
+  "version": "0.1.0",
+  "publisher": "lifx2015",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "liteCode.openMarkdownPreview",
+        "title": "Lite Code: Open Markdown Preview"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "liteCode.openMarkdownPreview",
+        "key": "ctrl+m",
+        "mac": "cmd+m",
+        "when": "editorTextFocus && resourceLangId == markdown"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0"
+  }
+}
