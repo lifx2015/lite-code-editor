@@ -1,0 +1,72 @@
+{
+  "meta": {
+    "id": "stackqueue",
+    "name": "栈/队列可视化",
+    "version": "1.0.0",
+    "author": "EditLite Team",
+    "description": "以动画方式展示栈（LIFO）与队列（FIFO）的压入/弹出/查看与入队/出队/查看操作。",
+    "directives": [
+      {
+        "name": "stack",
+        "description": "栈可视化（LIFO），展示压入（Push）、弹出（Pop）与查看栈顶（Peek）。",
+        "params": [
+          {
+            "name": "values",
+            "type": "number[]",
+            "required": false,
+            "default": [10, 20, 30, 40, 50],
+            "description": "初始元素"
+          },
+          {
+            "name": "pushValue",
+            "type": "number",
+            "required": false,
+            "description": "要压入的值（缺省时随机 1-100）"
+          },
+          {
+            "name": "speed",
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "动画速度（毫秒）"
+          }
+        ],
+        "examples": [
+          ":stack{}",
+          ":stack{values=[1,2,3,4,5]}"
+        ]
+      },
+      {
+        "name": "queue",
+        "description": "队列可视化（FIFO），展示入队（Enqueue）、出队（Dequeue）与查看队头（Peek）。",
+        "params": [
+          {
+            "name": "values",
+            "type": "number[]",
+            "required": false,
+            "default": [10, 20, 30, 40, 50],
+            "description": "初始元素"
+          },
+          {
+            "name": "pushValue",
+            "type": "number",
+            "required": false,
+            "description": "要入队的值（缺省时随机 1-100）"
+          },
+          {
+            "name": "speed",
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "动画速度（毫秒）"
+          }
+        ],
+        "examples": [
+          ":queue{}",
+          ":queue{values=[100,200,300]}"
+        ]
+      }
+    ]
+  },
+  "main": "index.html"
+}

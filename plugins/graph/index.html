@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>图算法可视化</title>
+  <style>
+    :root { --bg-primary:#ffffff; --bg-secondary:#f7f8fa; --bg-tertiary:#eef0f4; --border-color:#e8eaed; --border-color-strong:#d1d5db; --text-primary:#111827; --text-secondary:#6b7280; --accent-color:#2563eb; --accent-hover:#1d4ed8; --bg-input:#f5f6f8; --success-color:#10b981; }
+    [data-theme="dark"] { --bg-primary:#1a1a1f; --bg-secondary:#141418; --bg-tertiary:#22222a; --border-color:#2e2e38; --border-color-strong:#3e3e4a; --text-primary:#e8e8ed; --text-secondary:#9a9aaa; --accent-color:#4a9eff; --accent-hover:#3b8bdb; --bg-input:#2a2a32; --success-color:#34d399; }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 8px;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    .graph-visualizer {
+      padding: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+
+    .visualizer-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .control-btn {
+      padding: 6px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .control-btn:hover {
+      background: var(--bg-tertiary);
+      border-color: var(--accent-color);
+    }
+
+    .control-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .step-info {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: SFMono-Regular, Consolas, monospace;
+    }
+
+    .graph-canvas {
+      width: 100%;
+      max-width: 400px;
+      height: auto;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      display: block;
+      margin: 0 auto;
+    }
+
+    .graph-status {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: SFMono-Regular, Consolas, monospace;
+      flex-wrap: wrap;
+    }
+
+    .visualizer-description {
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <div class="graph-visualizer">
+    <div class="visualizer-controls">
+      <button id="btnPlay" class="control-btn">▶ 播放</button>
+      <button id="btnStep" class="control-btn">⏭ 单步</button>
+      <button id="btnReset" class="control-btn">↺ 重置</button>
+      <span class="step-info" id="stepInfo">算法: BFS</span>
+    </div>
+
+    <svg class="graph-canvas" id="canvas" viewBox="0 0 400 180"></svg>
+
+    <div class="graph-status" id="status"></div>
+
+    <div class="visualizer-description" id="description"></div>
+  </div>
+
+  <script>
+    const args = PluginRuntime.getResolvedArgs ? PluginRuntime.getResolvedArgs() : {
+      algorithm: 'bfs',
+      startNode: 'A',
+      speed: 800,
+      ...(PluginRuntime.args || {})
+    };
+
+    // ============================================
+    // 默认图数据（与源组件一致）
+    // ============================================
+
+    const fallbackNodes = [
+      { id: 'A', label: 'A' },
+      { id: 'B', label: 'B' },
+      { id: 'C', label: 'C' },
+      { id: 'D', label: 'D' },
+      { id: 'E', label: 'E' },
+      { id: 'F', label: 'F' },
+    ];
+
+    const fallbackEdges = [
+      { from: 'A', to: 'B', weight: 4 },
+      { from: 'A', to: 'C', weight: 2 },
+      { from: 'B', to: 'C', weight: 1 },
+      { from: 'B', to: 'D', weight: 5 },
+      { from: 'C', to: 'D', weight: 8 },
+      { from: 'C', to: 'E', weight: 10 },
+      { from: 'D', to: 'E', weight: 2 },
+      { from: 'D', to: 'F', weight: 6 },
+      { from: 'E', to: 'F', weight: 3 },
+    ];
+
+    const nodes = Array.isArray(args.nodes) && args.nodes.length ? args.nodes : fallbackNodes;
+    const edges = Array.isArray(args.edges) && args.edges.length ? args.edges : fallbackEdges;
+    const algorithm = args.algorithm || 'bfs';
+    const startNode = args.startNode || 'A';
+    const speed = typeof args.speed === 'number' ? args.speed : 800;
+
+    // 布局位置
+    const nodePositions = {
+      A: { x: 50, y: 80 },
+      B: { x: 150, y: 40 },
+      C: { x: 150, y: 120 },
+      D: { x: 250, y: 80 },
+      E: { x: 350, y: 120 },
+      F: { x: 350, y: 40 },
+    };
+
+    // 为自定义节点计算布局位置
+    function calculateNodePositions(nodeList) {
+      const positions = {};
+
+      for (const node of nodeList) {
+        if (nodePositions[node.id]) {
+          positions[node.id] = nodePositions[node.id];
+        }
+      }
+
+      const unpositionedNodes = nodeList.filter(n => !positions[n.id]);
+      if (unpositionedNodes.length > 0) {
+        const centerX = 200;
+        const centerY = 90;
+        const radius = 70;
+        const count = unpositionedNodes.length;
+
+        unpositionedNodes.forEach((node, idx) => {
+          const angle = (2 * Math.PI * idx) / count - Math.PI / 2;
+          positions[node.id] = {
+            x: centerX + radius * Math.cos(angle),
+            y: centerY + radius * Math.sin(angle),
+          };
+        });
+      }
+
+      return positions;
+    }
+
+    const positions = calculateNodePositions(nodes);
+
+    // ============================================
+    // 图算法实现
+    // ============================================
+
+    function buildAdjList(edgeList) {
+      const adj = new Map();
+      for (const e of edgeList) {
+        if (!adj.has(e.from)) adj.set(e.from, []);
+        if (!adj.has(e.to)) adj.set(e.to, []);
+        adj.get(e.from).push(e.to);
+        adj.get(e.to).push(e.from);
+      }
+      return adj;
+    }
+
+    function* bfs(_nodes, edgeList, start) {
+      const adj = buildAdjList(edgeList);
+      const visited = [];
+      const queue = [start];
+
+      yield { visited: [], current: null, queue: [...queue], description: `从节点 ${start} 开始 BFS` };
+
+      while (queue.length > 0) {
+        const current = queue.shift();
+        if (visited.includes(current)) continue;
+
+        visited.push(current);
+        yield { visited: [...visited], current, queue: [...queue], description: `访问节点 ${current}` };
+
+        const neighbors = adj.get(current) || [];
+        for (const neighbor of neighbors) {
+          if (!visited.includes(neighbor) && !queue.includes(neighbor)) {
+            queue.push(neighbor);
+          }
+        }
+        yield { visited: [...visited], current, queue: [...queue], description: `将邻居加入队列: [${queue.join(', ')}]` };
+      }
+
+      yield { visited, current: null, queue: [], description: 'BFS 完成' };
+    }
+
+    function* dfs(_nodes, edgeList, start) {
+      const adj = buildAdjList(edgeList);
+      const visited = [];
+      const stack = [start];
+
+      yield { visited: [], current: null, stack: [...stack], description: `从节点 ${start} 开始 DFS` };
+
+      while (stack.length > 0) {
+        const current = stack.pop();
+        if (visited.includes(current)) continue;
+
+        visited.push(current);
+        yield { visited: [...visited], current, stack: [...stack], description: `访问节点 ${current}` };
+
+        const neighbors = adj.get(current) || [];
+        for (const neighbor of [...neighbors].reverse()) {
+          if (!visited.includes(neighbor)) {
+            stack.push(neighbor);
+          }
+        }
+        yield { visited: [...visited], current, stack: [...stack], description: `栈: [${stack.join(', ')}]` };
+      }
+
+      yield { visited, current: null, stack: [], description: 'DFS 完成' };
+    }
+
+    function* dijkstra(nodeList, edgeList, start) {
+      const adj = new Map();
+      for (const e of edgeList) {
+        if (!adj.has(e.from)) adj.set(e.from, []);
+        if (!adj.has(e.to)) adj.set(e.to, []);
+        adj.get(e.from).push({ to: e.to, weight: e.weight || 1 });
+        adj.get(e.to).push({ to: e.from, weight: e.weight || 1 });
+      }
+
+      const distances = {};
+      const previous = {};
+      const visited = [];
+
+      for (const node of nodeList) {
+        distances[node.id] = Infinity;
+        previous[node.id] = null;
+      }
+      distances[start] = 0;
+
+      yield { visited: [], current: null, distances: { ...distances }, previous: { ...previous }, description: `初始化, 从 ${start} 开始` };
+
+      while (true) {
+        let minDist = Infinity;
+        let current = null;
+
+        for (const node of nodeList) {
+          if (!visited.includes(node.id) && distances[node.id] < minDist) {
+            minDist = distances[node.id];
+            current = node.id;
+          }
+        }
+
+        if (current === null) break;
+        visited.push(current);
+
+        yield { visited: [...visited], current, distances: { ...distances }, previous: { ...previous }, description: `选择最短距离节点 ${current} (距离: ${minDist})` };
+
+        const neighbors = adj.get(current) || [];
+        for (const { to, weight } of neighbors) {
+          if (!visited.includes(to)) {
+            const newDist = distances[current] + weight;
+            if (newDist < distances[to]) {
+              distances[to] = newDist;
+              previous[to] = current;
+              yield { visited: [...visited], current, distances: { ...distances }, previous: { ...previous }, description: `更新 ${to} 距离: ${newDist}` };
+            }
+          }
+        }
+      }
+
+      yield { visited, current: null, distances, previous, description: 'Dijkstra 完成' };
+    }
+
+    function* kruskal(nodeList, edgeList) {
+      const parent = {};
+      const rank = {};
+
+      for (const node of nodeList) {
+        parent[node.id] = node.id;
+        rank[node.id] = 0;
+      }
+
+      function find(x) {
+        if (parent[x] !== x) parent[x] = find(parent[x]);
+        return parent[x];
+      }
+
+      function union(x, y) {
+        const px = find(x), py = find(y);
+        if (px === py) return false;
+        if (rank[px] < rank[py]) parent[px] = py;
+        else if (rank[px] > rank[py]) parent[py] = px;
+        else { parent[py] = px; rank[px]++; }
+        return true;
+      }
+
+      const sortedEdges = [...edgeList].sort((a, b) => (a.weight || 1) - (b.weight || 1));
+      const mstEdges = [];
+      const visited = [];
+
+      yield { visited: [], current: null, edges: [], description: 'Kruskal: 按权重排序边' };
+
+      for (const edge of sortedEdges) {
+        const edgeId = `${edge.from}-${edge.to}`;
+        yield { visited, current: null, edges: [...mstEdges], description: `检查边 ${edge.from}-${edge.to} (权重: ${edge.weight})` };
+
+        if (union(edge.from, edge.to)) {
+          mstEdges.push(edgeId);
+          if (!visited.includes(edge.from)) visited.push(edge.from);
+          if (!visited.includes(edge.to)) visited.push(edge.to);
+          yield { visited: [...visited], current: null, edges: [...mstEdges], description: `添加边 ${edge.from}-${edge.to}` };
+        } else {
+          yield { visited, current: null, edges: [...mstEdges], description: `跳过边 ${edge.from}-${edge.to} (形成环)` };
+        }
+      }
+
+      yield { visited, current: null, edges: mstEdges, description: `MST 完成, 共 ${mstEdges.length} 条边` };
+    }
+
+    function* prim(nodeList, edgeList, start) {
+      const adj = new Map();
+      for (const e of edgeList) {
+        if (!adj.has(e.from)) adj.set(e.from, []);
+        if (!adj.has(e.to)) adj.set(e.to, []);
+        adj.get(e.from).push({ to: e.to, weight: e.weight || 1 });
+        adj.get(e.to).push({ to: e.from, weight: e.weight || 1 });
+      }
+
+      const visited = [start];
+      const mstEdges = [];
+
+      yield { visited: [...visited], current: start, edges: [], description: `Prim: 从 ${start} 开始` };
+
+      while (visited.length < nodeList.length) {
+        let minEdge = null;
+
+        for (const v of visited) {
+          const neighbors = adj.get(v) || [];
+          for (const n of neighbors) {
+            if (!visited.includes(n.to)) {
+              if (!minEdge || n.weight < minEdge.weight) {
+                minEdge = { from: v, to: n.to, weight: n.weight };
+              }
+            }
+          }
+        }
+
+        if (!minEdge) break;
+
+        visited.push(minEdge.to);
+        mstEdges.push(`${minEdge.from}-${minEdge.to}`);
+        yield { visited: [...visited], current: minEdge.to, edges: [...mstEdges], description: `添加边 ${minEdge.from}-${minEdge.to} (权重: ${minEdge.weight})` };
+      }
+
+      yield { visited, current: null, edges: mstEdges, description: `MST 完成, 共 ${mstEdges.length} 条边` };
+    }
+
+    function runAlgorithm() {
+      switch (algorithm) {
+        case 'bfs': return bfs(nodes, edges, startNode);
+        case 'dfs': return dfs(nodes, edges, startNode);
+        case 'dijkstra': return dijkstra(nodes, edges, startNode);
+        case 'kruskal': return kruskal(nodes, edges);
+        case 'prim': return prim(nodes, edges, startNode);
+        default: return bfs(nodes, edges, startNode);
+      }
+    }
+
+    function collectSteps(gen) {
+      const steps = [];
+      let result = gen.next();
+      while (!result.done) {
+        steps.push(result.value);
+        result = gen.next();
+      }
+      return steps;
+    }
+
+    // ============================================
+    // 渲染
+    // ============================================
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+
+    const canvasEl = document.getElementById('canvas');
+    const statusEl = document.getElementById('status');
+    const descEl = document.getElementById('description');
+    const stepInfoEl = document.getElementById('stepInfo');
+    const btnPlay = document.getElementById('btnPlay');
+    const btnStep = document.getElementById('btnStep');
+    const btnReset = document.getElementById('btnReset');
+
+    const steps = collectSteps(runAlgorithm());
+    let currentStep = 0;
+    let isPlaying = false;
+    let timer = null;
+
+    let currentState = {
+      visited: [],
+      current: null,
+      queue: [],
+      stack: [],
+      pathEdges: [],
+      distances: {},
+      description: '',
+    };
+
+    function svgEl(tag, attrs) {
+      const el = document.createElementNS(SVG_NS, tag);
+      for (const key in attrs) el.setAttribute(key, attrs[key]);
+      return el;
+    }
+
+    function edgeKey(from, to) {
+      return [from, to].sort().join('-');
+    }
+
+    function renderEdges() {
+      const activeEdges = new Set(currentState.pathEdges.map(e => {
+        const [a, b] = e.split('-');
+        return edgeKey(a, b);
+      }));
+
+      const group = svgEl('g', {});
+      edges.forEach(edge => {
+        const from = positions[edge.from];
+        const to = positions[edge.to];
+        if (!from || !to) return;
+
+        const isActive = activeEdges.has(edgeKey(edge.from, edge.to));
+        const line = svgEl('line', {
+          x1: from.x, y1: from.y,
+          x2: to.x, y2: to.y,
+          'stroke-width': isActive ? 3 : 1.5,
+        });
+        line.style.stroke = isActive ? '#2563eb' : 'var(--border-color-strong)';
+        group.appendChild(line);
+
+        if (edge.weight !== undefined && edge.weight !== null) {
+          const text = svgEl('text', {
+            x: (from.x + to.x) / 2,
+            y: (from.y + to.y) / 2 - 8,
+            'text-anchor': 'middle',
+            'font-size': 10,
+          });
+          text.style.fill = 'var(--text-secondary)';
+          text.textContent = edge.weight;
+          group.appendChild(text);
+        }
+      });
+
+      return group;
+    }
+
+    function renderNodes() {
+      const group = svgEl('g', {});
+      nodes.forEach(node => {
+        const pos = positions[node.id];
+        if (!pos) return;
+
+        const isVisited = currentState.visited.includes(node.id);
+        const isCurrent = currentState.current === node.id;
+
+        const circle = svgEl('circle', {
+          cx: pos.x,
+          cy: pos.y,
+          r: 18,
+          'stroke-width': 2,
+        });
+        circle.style.fill = isCurrent ? '#2563eb' : isVisited ? '#10b981' : 'var(--bg-tertiary)';
+        circle.style.stroke = isCurrent ? '#1d4ed8' : isVisited ? '#059669' : 'var(--border-color-strong)';
+        group.appendChild(circle);
+
+        const label = svgEl('text', {
+          x: pos.x,
+          y: pos.y + 4,
+          'text-anchor': 'middle',
+          'font-size': 12,
+          'font-weight': 600,
+        });
+        label.style.fill = (isCurrent || isVisited) ? 'white' : 'var(--text-primary)';
+        label.textContent = node.label || node.id;
+        group.appendChild(label);
+
+        const dist = currentState.distances[node.id];
+        if (dist !== undefined && dist !== Infinity) {
+          const distText = svgEl('text', {
+            x: pos.x,
+            y: pos.y - 24,
+            'text-anchor': 'middle',
+            'font-size': 9,
+          });
+          distText.style.fill = 'var(--accent-color)';
+          distText.textContent = `d=${dist}`;
+          group.appendChild(distText);
+        }
+      });
+
+      return group;
+    }
+
+    function renderStatus() {
+      statusEl.innerHTML = '';
+      const { queue, stack, visited } = currentState;
+      if (queue.length > 0) {
+        const span = document.createElement('span');
+        span.textContent = `队列: [${queue.join(', ')}]`;
+        statusEl.appendChild(span);
+      }
+      if (stack.length > 0) {
+        const span = document.createElement('span');
+        span.textContent = `栈: [${stack.join(', ')}]`;
+        statusEl.appendChild(span);
+      }
+      if (visited.length > 0) {
+        const span = document.createElement('span');
+        span.textContent = `已访问: [${visited.join(', ')}]`;
+        statusEl.appendChild(span);
+      }
+    }
+
+    function render() {
+      canvasEl.innerHTML = '';
+      canvasEl.appendChild(renderEdges());
+      canvasEl.appendChild(renderNodes());
+
+      renderStatus();
+
+      descEl.textContent = currentState.description;
+
+      stepInfoEl.textContent = `算法: ${algorithm.toUpperCase()} · 步骤: ${currentStep} / ${steps.length}`;
+      btnStep.disabled = isPlaying;
+    }
+
+    function notify(status) {
+      if (PluginRuntime.updateState) {
+        PluginRuntime.updateState({ status, currentStep, totalSteps: steps.length });
+      }
+    }
+
+    function step() {
+      if (currentStep >= steps.length) return;
+      const s = steps[currentStep];
+      currentState.visited = s.visited || [];
+      currentState.current = s.current === undefined ? null : s.current;
+      currentState.queue = s.queue || [];
+      currentState.stack = s.stack || [];
+      currentState.pathEdges = s.edges || [];
+      if (s.distances) currentState.distances = s.distances;
+      currentState.description = s.description;
+      currentStep++;
+      render();
+      if (currentStep >= steps.length) {
+        stopPlay();
+        notify('completed');
+      } else {
+        notify(isPlaying ? 'playing' : 'paused');
+      }
+    }
+
+    function clearState() {
+      currentState = {
+        visited: [],
+        current: null,
+        queue: [],
+        stack: [],
+        pathEdges: [],
+        distances: {},
+        description: '',
+      };
+    }
+
+    function startPlay() {
+      if (isPlaying) return;
+      if (currentStep >= steps.length) {
+        currentStep = 0;
+        clearState();
+      }
+      isPlaying = true;
+      btnPlay.textContent = '⏸ 暂停';
+      render();
+      loop();
+      notify('playing');
+    }
+
+    function loop() {
+      if (!isPlaying) return;
+      timer = setTimeout(() => {
+        if (!isPlaying) return;
+        step();
+        if (currentStep < steps.length && isPlaying) loop();
+      }, speed);
+    }
+
+    function stopPlay() {
+      isPlaying = false;
+      if (timer) { clearTimeout(timer); timer = null; }
+      btnPlay.textContent = '▶ 播放';
+      btnStep.disabled = false;
+    }
+
+    function reset() {
+      stopPlay();
+      currentStep = 0;
+      clearState();
+      render();
+      notify('idle');
+    }
+
+    btnPlay.addEventListener('click', () => {
+      if (isPlaying) {
+        stopPlay();
+        notify('paused');
+      } else {
+        startPlay();
+      }
+    });
+
+    btnStep.addEventListener('click', () => {
+      if (isPlaying) return;
+      step();
+    });
+
+    btnReset.addEventListener('click', reset);
+
+    // 参数变化时宿主会重新注入 iframe，无需额外处理
+    window.onArgsUpdate = function () {};
+
+    render();
+    notify('idle');
+  </script>
+</body>
+</html>

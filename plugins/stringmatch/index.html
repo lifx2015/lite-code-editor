@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>字符串匹配可视化</title>
+  <style>
+    :root { --bg-primary:#ffffff; --bg-secondary:#f7f8fa; --bg-tertiary:#eef0f4; --border-color:#e8eaed; --border-color-strong:#d1d5db; --text-primary:#111827; --text-secondary:#6b7280; --accent-color:#2563eb; --accent-hover:#1d4ed8; --bg-input:#f5f6f8; --success-color:#10b981; }
+    [data-theme="dark"] { --bg-primary:#1a1a1f; --bg-secondary:#141418; --bg-tertiary:#22222a; --border-color:#2e2e38; --border-color-strong:#3e3e4a; --text-primary:#e8e8ed; --text-secondary:#9a9aaa; --accent-color:#4a9eff; --accent-hover:#3b8bdb; --bg-input:#2a2a32; --success-color:#34d399; }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 8px;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    .stringmatch-visualizer {
+      padding: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+
+    .visualizer-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .control-btn {
+      padding: 6px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .control-btn:hover {
+      background: var(--bg-tertiary);
+      border-color: var(--accent-color);
+    }
+
+    .control-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .step-info {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: SFMono-Regular, Consolas, monospace;
+    }
+
+    .stringmatch-text-container,
+    .stringmatch-pattern-container {
+      margin-bottom: 16px;
+    }
+
+    .stringmatch-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .stringmatch-text,
+    .stringmatch-pattern {
+      font-family: SFMono-Regular, Consolas, monospace;
+      font-size: 18px;
+      letter-spacing: 0.1em;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      display: inline-block;
+      transition: margin-left 0.3s;
+      white-space: nowrap;
+    }
+
+    .stringmatch-indices {
+      font-family: SFMono-Regular, Consolas, monospace;
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+      padding-left: 12px;
+      white-space: nowrap;
+    }
+
+    .stringmatch-index {
+      display: inline-block;
+      width: 1ch;
+      letter-spacing: 0.1em;
+      text-align: center;
+    }
+
+    .stringmatch-char {
+      display: inline-block;
+      width: 1ch;
+      text-align: center;
+      transition: color 0.2s;
+    }
+
+    .stringmatch-char.comparing {
+      background: rgba(234, 179, 8, 0.2);
+      border-radius: 4px;
+    }
+
+    .stringmatch-char.matching {
+      background: rgba(34, 197, 94, 0.2);
+      border-radius: 4px;
+    }
+
+    .stringmatch-char.current {
+      font-weight: bold;
+      text-decoration: underline;
+    }
+
+    .stringmatch-lps-container {
+      margin-top: 12px;
+    }
+
+    .stringmatch-lps {
+      display: flex;
+      gap: 2px;
+      font-family: SFMono-Regular, Consolas, monospace;
+    }
+
+    .lps-value {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      font-size: 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      color: var(--text-secondary);
+    }
+
+    .lps-value.current {
+      background: var(--accent-color);
+      color: white;
+      border-color: var(--accent-color);
+    }
+
+    .visualizer-description {
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .visualizer-info {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="stringmatch-visualizer">
+    <div class="visualizer-controls">
+      <button id="btnPlay" class="control-btn">▶ 播放</button>
+      <button id="btnStep" class="control-btn">⏭ 单步</button>
+      <button id="btnReset" class="control-btn">↺ 重置</button>
+      <span class="step-info" id="stepInfo">步骤: 0 / 0</span>
+    </div>
+
+    <div class="stringmatch-text-container">
+      <div class="stringmatch-label">文本:</div>
+      <div class="stringmatch-text" id="textRow"></div>
+      <div class="stringmatch-indices" id="indexRow"></div>
+    </div>
+
+    <div class="stringmatch-pattern-container">
+      <div class="stringmatch-label">模式:</div>
+      <div class="stringmatch-pattern" id="patternRow"></div>
+    </div>
+
+    <div class="stringmatch-lps-container" id="lpsContainer" style="display:none">
+      <div class="stringmatch-label">LPS 表:</div>
+      <div class="stringmatch-lps" id="lpsRow"></div>
+    </div>
+
+    <div class="visualizer-description" id="description" style="display:none"></div>
+
+    <div class="visualizer-info">
+      <span id="infoAlgorithm"></span>
+      <span id="infoTextLength"></span>
+      <span id="infoPatternLength"></span>
+      <span id="infoMatchCount"></span>
+    </div>
+  </div>
+
+  <script>
+    const args = PluginRuntime.getResolvedArgs ? PluginRuntime.getResolvedArgs() : {
+      algorithm: 'kmp',
+      text: 'ABABDABACDABABCABAB',
+      pattern: 'ABABCABAB',
+      speed: 500,
+      ...(PluginRuntime.args || {})
+    };
+
+    const algorithm = args.algorithm || 'kmp';
+    const text = typeof args.text === 'string' ? args.text : 'ABABDABACDABABCABAB';
+    const pattern = typeof args.pattern === 'string' ? args.pattern : 'ABABCABAB';
+    const speed = typeof args.speed === 'number' ? args.speed : 500;
+
+    // ============================================
+    // 字符串匹配算法（生成器）
+    // ============================================
+
+    // 朴素匹配
+    function* naiveMatch(text, pattern) {
+      const n = text.length;
+      const m = pattern.length;
+      const foundIndices = [];
+
+      yield {
+        text,
+        pattern,
+        textIndex: 0,
+        patternIndex: 0,
+        compareIndices: [],
+        matchIndices: [],
+        foundIndices: [],
+        description: `开始朴素匹配：在文本中查找模式 "${pattern}"`,
+      };
+
+      for (let i = 0; i <= n - m; i++) {
+        let j = 0;
+        const matchIndices = [];
+
+        yield {
+          text,
+          pattern,
+          textIndex: i,
+          patternIndex: 0,
+          compareIndices: [],
+          matchIndices: [],
+          foundIndices: [...foundIndices],
+          description: `尝试从位置 ${i} 开始匹配`,
+        };
+
+        while (j < m) {
+          yield {
+            text,
+            pattern,
+            textIndex: i + j,
+            patternIndex: j,
+            compareIndices: [i + j],
+            matchIndices: [...matchIndices],
+            foundIndices: [...foundIndices],
+            description: `比较 text[${i + j}]='${text[i + j]}' 与 pattern[${j}]='${pattern[j]}'`,
+          };
+
+          if (text[i + j] === pattern[j]) {
+            matchIndices.push(i + j);
+            j++;
+          } else {
+            yield {
+              text,
+              pattern,
+              textIndex: i + j,
+              patternIndex: j,
+              compareIndices: [i + j],
+              matchIndices: [...matchIndices],
+              foundIndices: [...foundIndices],
+              description: `不匹配！text[${i + j}]='${text[i + j]}' ≠ pattern[${j}]='${pattern[j]}'，移动到下一位置`,
+            };
+            break;
+          }
+        }
+
+        if (j === m) {
+          foundIndices.push(i);
+          yield {
+            text,
+            pattern,
+            textIndex: i,
+            patternIndex: 0,
+            compareIndices: [],
+            matchIndices: Array.from({ length: m }, (_, k) => i + k),
+            foundIndices: [...foundIndices],
+            description: `✓ 在位置 ${i} 找到匹配！`,
+          };
+        }
+      }
+
+      yield {
+        text,
+        pattern,
+        textIndex: n,
+        patternIndex: m,
+        compareIndices: [],
+        matchIndices: [],
+        foundIndices: [...foundIndices],
+        description: foundIndices.length > 0
+          ? `匹配完成，共找到 ${foundIndices.length} 个匹配`
+          : '匹配完成，未找到匹配',
+      };
+    }
+
+    // KMP 算法
+    function computeLPS(pattern) {
+      const m = pattern.length;
+      const lps = new Array(m).fill(0);
+      let len = 0;
+      let i = 1;
+
+      while (i < m) {
+        if (pattern[i] === pattern[len]) {
+          len++;
+          lps[i] = len;
+          i++;
+        } else {
+          if (len !== 0) {
+            len = lps[len - 1];
+          } else {
+            lps[i] = 0;
+            i++;
+          }
+        }
+      }
+
+      return lps;
+    }
+
+    function* kmpMatch(text, pattern) {
+      const n = text.length;
+      const m = pattern.length;
+      const lps = computeLPS(pattern);
+      const foundIndices = [];
+
+      yield {
+        text,
+        pattern,
+        textIndex: 0,
+        patternIndex: 0,
+        compareIndices: [],
+        matchIndices: [],
+        foundIndices: [],
+        lpsTable: lps,
+        description: `KMP 算法：计算部分匹配表 (LPS)`,
+      };
+
+      let i = 0;
+      let j = 0;
+
+      yield {
+        text,
+        pattern,
+        textIndex: i,
+        patternIndex: j,
+        compareIndices: [],
+        matchIndices: [],
+        foundIndices: [],
+        lpsTable: lps,
+        currentLps: lps[j],
+        description: `开始匹配，i=${i}, j=${j}`,
+      };
+
+      while (i < n) {
+        yield {
+          text,
+          pattern,
+          textIndex: i,
+          patternIndex: j,
+          compareIndices: [i],
+          matchIndices: [],
+          foundIndices: [...foundIndices],
+          lpsTable: lps,
+          currentLps: lps[j],
+          description: `比较 text[${i}]='${text[i]}' 与 pattern[${j}]='${pattern[j]}'`,
+        };
+
+        if (pattern[j] === text[i]) {
+          i++;
+          j++;
+        }
+
+        if (j === m) {
+          foundIndices.push(i - j);
+          yield {
+            text,
+            pattern,
+            textIndex: i - 1,
+            patternIndex: j - 1,
+            compareIndices: [],
+            matchIndices: Array.from({ length: m }, (_, k) => i - j + k),
+            foundIndices: [...foundIndices],
+            lpsTable: lps,
+            description: `✓ 在位置 ${i - j} 找到匹配！`,
+          };
+          j = lps[j - 1];
+        } else if (i < n && pattern[j] !== text[i]) {
+          if (j !== 0) {
+            yield {
+              text,
+              pattern,
+              textIndex: i,
+              patternIndex: j,
+              compareIndices: [i],
+              matchIndices: [],
+              foundIndices: [...foundIndices],
+              lpsTable: lps,
+              currentLps: lps[j - 1],
+              description: `不匹配！利用 LPS 表跳过 ${j - lps[j - 1]} 个字符`,
+            };
+            j = lps[j - 1];
+          } else {
+            yield {
+              text,
+              pattern,
+              textIndex: i,
+              patternIndex: j,
+              compareIndices: [i],
+              matchIndices: [],
+              foundIndices: [...foundIndices],
+              lpsTable: lps,
+              description: `不匹配且 j=0，移动文本指针`,
+            };
+            i++;
+          }
+        }
+      }
+
+      yield {
+        text,
+        pattern,
+        textIndex: n,
+        patternIndex: j,
+        compareIndices: [],
+        matchIndices: [],
+        foundIndices: [...foundIndices],
+        lpsTable: lps,
+        description: foundIndices.length > 0
+          ? `KMP 匹配完成，共找到 ${foundIndices.length} 个匹配`
+          : 'KMP 匹配完成，未找到匹配',
+      };
+    }
+
+    // Boyer-Moore 算法（简化版：坏字符规则）
+    function computeBadCharTable(pattern) {
+      const table = {};
+      const m = pattern.length;
+
+      for (let i = 0; i < m - 1; i++) {
+        table[pattern[i]] = m - 1 - i;
+      }
+
+      return table;
+    }
+
+    function* boyerMooreMatch(text, pattern) {
+      const n = text.length;
+      const m = pattern.length;
+      const badCharTable = computeBadCharTable(pattern);
+      const foundIndices = [];
+
+      yield {
+        text,
+        pattern,
+        textIndex: m - 1,
+        patternIndex: m - 1,
+        compareIndices: [],
+        matchIndices: [],
+        foundIndices: [],
+        badCharTable,
+        description: `Boyer-Moore 算法：构建坏字符表`,
+      };
+
+      let i = m - 1;
+
+      while (i < n) {
+        let j = m - 1;
+        const matchIndices = [];
+
+        yield {
+          text,
+          pattern,
+          textIndex: i,
+          patternIndex: j,
+          compareIndices: [],
+          matchIndices: [],
+          foundIndices: [...foundIndices],
+          badCharTable,
+          description: `从右向左检查，起始位置 ${i - m + 1}`,
+        };
+
+        while (j >= 0 && text[i - (m - 1 - j)] === pattern[j]) {
+          matchIndices.unshift(i - (m - 1 - j));
+          j--;
+        }
+
+        if (j < 0) {
+          foundIndices.push(i - m + 1);
+          yield {
+            text,
+            pattern,
+            textIndex: i,
+            patternIndex: 0,
+            compareIndices: [],
+            matchIndices: Array.from({ length: m }, (_, k) => i - m + 1 + k),
+            foundIndices: [...foundIndices],
+            badCharTable,
+            description: `✓ 在位置 ${i - m + 1} 找到匹配！`,
+          };
+          i += m;
+        } else {
+          const badChar = text[i - (m - 1 - j)];
+          const shift = badCharTable[badChar] || m;
+
+          yield {
+            text,
+            pattern,
+            textIndex: i - (m - 1 - j),
+            patternIndex: j,
+            compareIndices: [i - (m - 1 - j)],
+            matchIndices: [...matchIndices],
+            foundIndices: [...foundIndices],
+            badCharTable,
+            description: `坏字符 '${badChar}'，查表得移动 ${shift} 位`,
+          };
+
+          i += Math.max(1, shift);
+        }
+      }
+
+      yield {
+        text,
+        pattern,
+        textIndex: n,
+        patternIndex: 0,
+        compareIndices: [],
+        matchIndices: [],
+        foundIndices: [...foundIndices],
+        badCharTable,
+        description: foundIndices.length > 0
+          ? `Boyer-Moore 匹配完成，共找到 ${foundIndices.length} 个匹配`
+          : 'Boyer-Moore 匹配完成，未找到匹配',
+      };
+    }
+
+    function getAlgorithm(name) {
+      switch (name) {
+        case 'naive': return naiveMatch;
+        case 'boyer-moore': return boyerMooreMatch;
+        case 'kmp':
+        default: return kmpMatch;
+      }
+    }
+
+    const MAX_STEPS = 200000;
+
+    function collectSteps(gen) {
+      const steps = [];
+      let result = gen.next();
+      while (!result.done && steps.length < MAX_STEPS) {
+        steps.push(result.value);
+        result = gen.next();
+      }
+      return steps;
+    }
+
+    // ============================================
+    // 状态与渲染
+    // ============================================
+
+    const textRowEl = document.getElementById('textRow');
+    const indexRowEl = document.getElementById('indexRow');
+    const patternRowEl = document.getElementById('patternRow');
+    const lpsContainerEl = document.getElementById('lpsContainer');
+    const lpsRowEl = document.getElementById('lpsRow');
+    const descEl = document.getElementById('description');
+    const stepInfoEl = document.getElementById('stepInfo');
+    const infoAlgorithmEl = document.getElementById('infoAlgorithm');
+    const infoTextLengthEl = document.getElementById('infoTextLength');
+    const infoPatternLengthEl = document.getElementById('infoPatternLength');
+    const infoMatchCountEl = document.getElementById('infoMatchCount');
+    const btnPlay = document.getElementById('btnPlay');
+    const btnStep = document.getElementById('btnStep');
+    const btnReset = document.getElementById('btnReset');
+
+    const algorithmNames = {
+      'naive': '朴素匹配',
+      'kmp': 'KMP 算法',
+      'boyer-moore': 'Boyer-Moore',
+    };
+
+    const emptyPattern = pattern.length === 0;
+    const steps = emptyPattern ? [] : collectSteps(getAlgorithm(algorithm)(text, pattern));
+    const totalSteps = steps.length;
+
+    let currentStep = 0;
+    let isPlaying = false;
+    let timer = null;
+    let currentState = {
+      currentTextIndex: 0,
+      currentPatternIndex: 0,
+      compareIndices: [],
+      matchIndices: [],
+      foundIndices: [],
+      lpsTable: [],
+      description: '',
+    };
+
+    function getCharColor(index) {
+      if (currentState.foundIndices.some(start => index >= start && index < start + pattern.length)) {
+        return '#22c55e';
+      }
+      if (currentState.matchIndices.includes(index)) {
+        return '#22c55e';
+      }
+      if (currentState.compareIndices.includes(index)) {
+        return '#eab308';
+      }
+      return 'var(--text-primary)';
+    }
+
+    function updateButtons() {
+      btnPlay.textContent = isPlaying ? '⏸ 暂停' : '▶ 播放';
+      btnStep.disabled = isPlaying || currentStep >= totalSteps;
+    }
+
+    function render() {
+      const {
+        currentTextIndex,
+        currentPatternIndex,
+        compareIndices,
+        matchIndices,
+        foundIndices,
+        lpsTable,
+        description,
+      } = currentState;
+
+      textRowEl.innerHTML = '';
+      for (let idx = 0; idx < text.length; idx++) {
+        const span = document.createElement('span');
+        const classes = ['stringmatch-char'];
+        if (compareIndices.includes(idx)) classes.push('comparing');
+        if (matchIndices.includes(idx)) classes.push('matching');
+        span.className = classes.join(' ');
+        span.style.color = getCharColor(idx);
+        span.textContent = text[idx];
+        textRowEl.appendChild(span);
+      }
+
+      indexRowEl.innerHTML = '';
+      for (let idx = 0; idx < text.length; idx++) {
+        const span = document.createElement('span');
+        span.className = 'stringmatch-index';
+        span.textContent = idx;
+        indexRowEl.appendChild(span);
+      }
+
+      patternRowEl.innerHTML = '';
+      patternRowEl.style.marginLeft = `${currentTextIndex - currentPatternIndex}ch`;
+      for (let idx = 0; idx < pattern.length; idx++) {
+        const span = document.createElement('span');
+        span.className = 'stringmatch-char' + (idx === currentPatternIndex ? ' current' : '');
+        span.style.color = getCharColor(currentTextIndex - currentPatternIndex + idx);
+        span.textContent = pattern[idx];
+        patternRowEl.appendChild(span);
+      }
+
+      if (algorithm === 'kmp' && lpsTable.length > 0) {
+        lpsContainerEl.style.display = '';
+        lpsRowEl.innerHTML = '';
+        lpsTable.forEach((val, idx) => {
+          const span = document.createElement('span');
+          span.className = 'lps-value' + (idx === currentPatternIndex ? ' current' : '');
+          span.textContent = val;
+          lpsRowEl.appendChild(span);
+        });
+      } else {
+        lpsContainerEl.style.display = 'none';
+      }
+
+      if (description) {
+        descEl.style.display = '';
+        descEl.textContent = description;
+      } else {
+        descEl.style.display = 'none';
+      }
+
+      stepInfoEl.textContent = `步骤: ${currentStep} / ${totalSteps}`;
+      infoMatchCountEl.textContent = `匹配数: ${foundIndices.length}`;
+      updateButtons();
+    }
+
+    function notify(status) {
+      if (PluginRuntime.updateState) {
+        PluginRuntime.updateState({ status, currentStep, totalSteps });
+      }
+    }
+
+    function step() {
+      if (currentStep < totalSteps) {
+        const stepData = steps[currentStep];
+        currentState.currentTextIndex = stepData.textIndex;
+        currentState.currentPatternIndex = stepData.patternIndex;
+        currentState.compareIndices = stepData.compareIndices;
+        currentState.matchIndices = stepData.matchIndices;
+        currentState.foundIndices = stepData.foundIndices;
+        currentState.description = stepData.description;
+        if (stepData.lpsTable) currentState.lpsTable = stepData.lpsTable;
+        currentStep++;
+        render();
+
+        if (currentStep >= totalSteps) {
+          stopPlay();
+          notify('completed');
+        }
+      }
+    }
+
+    function loop() {
+      if (!isPlaying) return;
+      timer = setTimeout(() => {
+        if (!isPlaying) return;
+        step();
+        if (isPlaying) loop();
+      }, speed);
+    }
+
+    function startPlay() {
+      if (isPlaying) return;
+      if (currentStep >= totalSteps) return;
+      isPlaying = true;
+      render();
+      notify('playing');
+      loop();
+    }
+
+    function stopPlay() {
+      isPlaying = false;
+      if (timer) { clearTimeout(timer); timer = null; }
+      updateButtons();
+    }
+
+    function reset() {
+      stopPlay();
+      currentStep = 0;
+      currentState = {
+        currentTextIndex: 0,
+        currentPatternIndex: 0,
+        compareIndices: [],
+        matchIndices: [],
+        foundIndices: [],
+        lpsTable: [],
+        description: '',
+      };
+      render();
+      notify('idle');
+    }
+
+    btnPlay.addEventListener('click', () => {
+      if (isPlaying) {
+        stopPlay();
+        notify('paused');
+      } else {
+        startPlay();
+      }
+    });
+
+    btnStep.addEventListener('click', () => {
+      if (isPlaying) return;
+      step();
+    });
+
+    btnReset.addEventListener('click', reset);
+
+    infoAlgorithmEl.textContent = `算法: ${algorithmNames[algorithm] || 'KMP 算法'}`;
+    infoTextLengthEl.textContent = `文本长度: ${text.length}`;
+    infoPatternLengthEl.textContent = `模式长度: ${pattern.length}`;
+    infoMatchCountEl.textContent = `匹配数: ${currentState.foundIndices.length}`;
+
+    if (emptyPattern) {
+      currentState.description = '模式不能为空，无法执行匹配';
+    }
+
+    // 参数变化时宿主会重新注入 iframe，无需额外处理
+    window.onArgsUpdate = function () {};
+
+    render();
+    notify('idle');
+  </script>
+</body>
+</html>

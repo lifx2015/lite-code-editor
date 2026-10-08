@@ -5,7 +5,8 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import type { VisualizationState } from '../../core/types/plugin';
+import type { VisualizationState } from '../../core/types/directive';
+import { subscribePluginChanges, getPluginChangeVersion } from '../../plugins/component-registry';
 
 interface ExternalPluginProps {
   pluginPath: string;
@@ -31,6 +32,40 @@ const ExternalPlugin: React.FC<ExternalPluginProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [htmlContent, setHtmlContent] = useState<string>('');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    typeof document !== 'undefined' &&
+    document.documentElement.getAttribute('data-theme') === 'dark'
+      ? 'dark'
+      : 'light'
+  );
+  const [reloadVersion, setReloadVersion] = useState(() => getPluginChangeVersion());
+
+  // 插件目录变化时重新读取插件文件（热重载）
+  useEffect(
+    () => subscribePluginChanges(() => setReloadVersion(getPluginChangeVersion())),
+    []
+  );
+
+  // 跟随宿主应用主题变化
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      setTheme(root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  // 通知 iframe 主题变化
+  useEffect(() => {
+    if (iframeRef.current?.contentWindow && htmlContent) {
+      iframeRef.current.contentWindow.postMessage(
+        { type: 'plugin:theme', theme },
+        '*'
+      );
+    }
+  }, [theme, htmlContent]);
 
   // 加载插件 HTML 文件
   useEffect(() => {
@@ -42,6 +77,7 @@ const ExternalPlugin: React.FC<ExternalPluginProps> = ({
           pluginPath,
           fileName: mainFile,
         });
+        setError(null);
         setHtmlContent(content);
       } catch (err) {
         const isTauriRuntime = typeof window !== 'undefined'
@@ -58,7 +94,7 @@ const ExternalPlugin: React.FC<ExternalPluginProps> = ({
     }
 
     loadPluginHtml();
-  }, [pluginPath, config, directiveName, args, onError]);
+  }, [pluginPath, config, directiveName, args, onError, reloadVersion]);
 
   // 处理来自 iframe 的消息
   useEffect(() => {
@@ -123,10 +159,13 @@ const ExternalPlugin: React.FC<ExternalPluginProps> = ({
     const runtimeScript = `
 <script>
   // lite-code-editor Plugin Runtime
+  document.documentElement.setAttribute('data-theme', ${JSON.stringify(theme)});
+
   window.PluginRuntime = {
-    directiveName: '${directiveName}',
-    args: ${JSON.stringify(args)},
-    config: ${JSON.stringify(config)},
+    directiveName: ${JSON.stringify(directiveName).replace(/</g, '\\u003c')},
+    args: ${JSON.stringify(args).replace(/</g, '\\u003c')},
+    config: ${JSON.stringify(config).replace(/</g, '\\u003c')},
+    theme: ${JSON.stringify(theme)},
 
     updateState(state) {
       window.parent.postMessage({
@@ -144,7 +183,7 @@ const ExternalPlugin: React.FC<ExternalPluginProps> = ({
 
     getParamDefs() {
       const directive = this.config.meta?.directives?.find(d => d.name === this.directiveName);
-      return directive ? directive.params : [];
+      return Array.isArray(directive?.params) ? directive.params : [];
     },
 
     getDefaults() {
@@ -164,17 +203,23 @@ const ExternalPlugin: React.FC<ExternalPluginProps> = ({
   };
 
   // 参数更新回调
-  window.onArgsUpdateCallbacks = [];
-  window.onArgsUpdate = function(callback) {
-    window.onArgsUpdateCallbacks.push(callback);
-  };
+  window.onArgsUpdate = null;
 
   window.addEventListener('message', (event) => {
-    const { type, args: newArgs, directiveName } = event.data || {};
+    if (event.source !== window.parent) return;
+    const { type, args: newArgs, directiveName, theme: newTheme } = event.data || {};
     if (type === 'plugin:updateArgs') {
       PluginRuntime.args = newArgs;
       PluginRuntime.directiveName = directiveName;
-      window.onArgsUpdateCallbacks.forEach(cb => cb(newArgs));
+      if (typeof window.onArgsUpdate === 'function') {
+        window.onArgsUpdate(newArgs);
+      }
+    } else if (type === 'plugin:theme') {
+      PluginRuntime.theme = newTheme;
+      document.documentElement.setAttribute('data-theme', newTheme);
+      if (typeof window.onThemeChange === 'function') {
+        window.onThemeChange(newTheme);
+      }
     }
   });
 
@@ -190,25 +235,28 @@ const ExternalPlugin: React.FC<ExternalPluginProps> = ({
     }, '*');
   }
 
-  // 初始报告高度
-  reportHeight();
-
-  // 监听 DOM 变化和窗口大小变化
-  if (typeof ResizeObserver !== 'undefined') {
-    const resizeObserver = new ResizeObserver(() => reportHeight());
-    resizeObserver.observe(document.body);
-    resizeObserver.observe(document.documentElement);
+  function startHeightWatch() {
+    reportHeight();
+    if (typeof ResizeObserver !== 'undefined') {
+      const resizeObserver = new ResizeObserver(() => reportHeight());
+      resizeObserver.observe(document.body);
+      resizeObserver.observe(document.documentElement);
+    }
+    let lastHeight = 0;
+    setInterval(() => {
+      const height = document.documentElement.scrollHeight || document.body.scrollHeight;
+      if (height !== lastHeight) {
+        lastHeight = height;
+        reportHeight();
+      }
+    }, 500);
   }
 
-  // 定期检查高度变化（作为备选方案）
-  let lastHeight = 0;
-  setInterval(() => {
-    const height = document.documentElement.scrollHeight || document.body.scrollHeight;
-    if (height !== lastHeight) {
-      lastHeight = height;
-      reportHeight();
-    }
-  }, 500);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startHeightWatch, { once: true });
+  } else {
+    startHeightWatch();
+  }
 </script>`;
 
     // 在 </head> 前注入运行时和样式
@@ -218,7 +266,7 @@ const ExternalPlugin: React.FC<ExternalPluginProps> = ({
 
     // 如果没有 </head>，在开头注入
     return hideScrollbarStyles + runtimeScript + htmlContent;
-  }, [htmlContent, directiveName, args, config]);
+  }, [htmlContent, directiveName, args, config, theme]);
 
   if (loading) {
     return (

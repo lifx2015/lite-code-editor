@@ -1,0 +1,74 @@
+{
+  "meta": {
+    "id": "hashtable",
+    "name": "哈希表可视化",
+    "version": "1.0.0",
+    "author": "EditLite Team",
+    "description": "以动画方式展示哈希表的插入与搜索过程，支持链地址法、线性探测、二次探测三种冲突处理方法。",
+    "directives": [
+      {
+        "name": "hashtable",
+        "description": "哈希表可视化",
+        "params": [
+          {
+            "name": "method",
+            "type": "string",
+            "required": false,
+            "default": "chaining",
+            "description": "冲突处理方法: chaining / linear / quadratic"
+          },
+          {
+            "name": "size",
+            "type": "number",
+            "required": false,
+            "default": 8,
+            "description": "哈希表容量（桶数量）"
+          },
+          {
+            "name": "items",
+            "type": "object[]",
+            "required": false,
+            "default": [
+              { "key": "apple", "value": 5 },
+              { "key": "banana", "value": 8 },
+              { "key": "cherry", "value": 3 },
+              { "key": "date", "value": 7 }
+            ],
+            "description": "初始键值对列表"
+          },
+          {
+            "name": "insertKey",
+            "type": "string",
+            "required": false,
+            "description": "插入操作使用的键（缺省时随机生成）"
+          },
+          {
+            "name": "insertValue",
+            "type": "number",
+            "required": false,
+            "description": "插入操作使用的值（缺省时随机生成）"
+          },
+          {
+            "name": "searchKey",
+            "type": "string",
+            "required": false,
+            "description": "搜索操作使用的键（缺省时从 items 中随机选择）"
+          },
+          {
+            "name": "speed",
+            "type": "number",
+            "required": false,
+            "default": 600,
+            "description": "动画速度（毫秒）"
+          }
+        ],
+        "examples": [
+          ":hashtable{}",
+          ":hashtable{method=\"linear\" size=10}",
+          ":hashtable{method=\"chaining\" items=[{key=\"apple\",value=5},{key=\"banana\",value=8}]}"
+        ]
+      }
+    ]
+  },
+  "main": "index.html"
+}

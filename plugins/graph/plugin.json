@@ -1,0 +1,77 @@
+{
+  "meta": {
+    "id": "graph",
+    "name": "图算法可视化",
+    "version": "1.0.0",
+    "author": "EditLite Team",
+    "description": "以动画方式展示图算法执行过程，支持 BFS、DFS、Dijkstra、Kruskal、Prim。",
+    "directives": [
+      {
+        "name": "graph",
+        "description": "图算法可视化",
+        "params": [
+          {
+            "name": "nodes",
+            "type": "object[]",
+            "required": false,
+            "default": [
+              { "id": "A", "label": "A" },
+              { "id": "B", "label": "B" },
+              { "id": "C", "label": "C" },
+              { "id": "D", "label": "D" },
+              { "id": "E", "label": "E" },
+              { "id": "F", "label": "F" }
+            ],
+            "description": "图的节点列表，如 [{id:\"A\"},{id:\"B\"}]"
+          },
+          {
+            "name": "edges",
+            "type": "object[]",
+            "required": false,
+            "default": [
+              { "from": "A", "to": "B", "weight": 4 },
+              { "from": "A", "to": "C", "weight": 2 },
+              { "from": "B", "to": "C", "weight": 1 },
+              { "from": "B", "to": "D", "weight": 5 },
+              { "from": "C", "to": "D", "weight": 8 },
+              { "from": "C", "to": "E", "weight": 10 },
+              { "from": "D", "to": "E", "weight": 2 },
+              { "from": "D", "to": "F", "weight": 6 },
+              { "from": "E", "to": "F", "weight": 3 }
+            ],
+            "description": "图的边列表，如 [{from:\"A\",to:\"B\",weight:4}]"
+          },
+          {
+            "name": "algorithm",
+            "type": "string",
+            "required": false,
+            "default": "bfs",
+            "description": "图算法: bfs / dfs / dijkstra / kruskal / prim"
+          },
+          {
+            "name": "startNode",
+            "type": "string",
+            "required": false,
+            "default": "A",
+            "description": "起始节点"
+          },
+          {
+            "name": "speed",
+            "type": "number",
+            "required": false,
+            "default": 800,
+            "description": "动画速度（毫秒）"
+          }
+        ],
+        "examples": [
+          ":graph{algorithm=\"bfs\"}",
+          ":graph{algorithm=\"dijkstra\" startNode=\"A\"}",
+          ":graph{algorithm=\"prim\"}",
+          ":graph{algorithm=\"kruskal\" speed=500}",
+          ":graph{nodes=[{\"id\":\"A\"},{\"id\":\"B\"},{\"id\":\"C\"},{\"id\":\"D\"}], edges=[{\"from\":\"A\",\"to\":\"B\",\"weight\":1},{\"from\":\"B\",\"to\":\"C\",\"weight\":2},{\"from\":\"C\",\"to\":\"D\",\"weight\":3},{\"from\":\"D\",\"to\":\"A\",\"weight\":4}], algorithm=\"dijkstra\", startNode=\"A\"}"
+        ]
+      }
+    ]
+  },
+  "main": "index.html"
+}

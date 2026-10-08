@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "id": "sort",
+    "name": "排序算法可视化",
+    "version": "1.0.0",
+    "author": "EditLite Team",
+    "description": "以动画方式展示排序过程的比较与交换，支持冒泡、快速、归并、插入、选择排序。",
+    "directives": [
+      {
+        "name": "sort",
+        "description": "排序算法可视化",
+        "params": [
+          {
+            "name": "algorithm",
+            "type": "string",
+            "required": false,
+            "default": "bubble",
+            "description": "排序算法: bubble / quick / merge / insertion / selection"
+          },
+          {
+            "name": "array",
+            "type": "number[]",
+            "required": false,
+            "default": [5, 2, 8, 1, 9, 3, 7, 4, 6],
+            "description": "待排序数组"
+          },
+          {
+            "name": "speed",
+            "type": "number",
+            "required": false,
+            "default": 300,
+            "description": "动画速度（毫秒）"
+          },
+          {
+            "name": "showSteps",
+            "type": "boolean",
+            "required": false,
+            "default": true,
+            "description": "是否显示步骤说明"
+          }
+        ],
+        "examples": [
+          ":sort{algorithm=\"bubble\"}",
+          ":sort{algorithm=\"quick\" array=[10,7,8,9,1,5] speed=200}",
+          ":sort{algorithm=\"merge\"}"
+        ]
+      }
+    ]
+  },
+  "main": "index.html"
+}

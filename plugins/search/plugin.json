@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "id": "search",
+    "name": "查找算法可视化",
+    "version": "1.0.0",
+    "author": "EditLite Team",
+    "description": "以动画方式展示查找过程，支持线性查找、二分查找、插值查找。",
+    "directives": [
+      {
+        "name": "search",
+        "description": "查找算法可视化",
+        "params": [
+          {
+            "name": "array",
+            "type": "number[]",
+            "required": false,
+            "default": [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25],
+            "description": "待查找数组"
+          },
+          {
+            "name": "target",
+            "type": "number",
+            "required": false,
+            "default": 13,
+            "description": "目标值"
+          },
+          {
+            "name": "algorithm",
+            "type": "string",
+            "required": false,
+            "default": "binary",
+            "description": "查找算法: linear / binary / interpolation"
+          },
+          {
+            "name": "speed",
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "动画速度（毫秒）"
+          }
+        ],
+        "examples": [
+          ":search{algorithm=\"binary\" target=13}",
+          ":search{algorithm=\"linear\" target=7 array=[5,3,8,1,9,7,2]}",
+          ":search{algorithm=\"interpolation\" target=50 array=[10,20,30,40,50,60,70,80,90]}"
+        ]
+      }
+    ]
+  },
+  "main": "index.html"
+}

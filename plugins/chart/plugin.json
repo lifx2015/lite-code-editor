@@ -1,0 +1,68 @@
+{
+  "meta": {
+    "id": "chart",
+    "name": "折线图可视化",
+    "version": "1.0.0",
+    "author": "EditLite Team",
+    "description": "使用 SVG 绘制简洁曲线图，支持单条/多条曲线，悬停显示数值。",
+    "directives": [
+      {
+        "name": "chart",
+        "description": "折线图可视化",
+        "params": [
+          {
+            "name": "title",
+            "type": "string",
+            "required": false,
+            "description": "图表标题"
+          },
+          {
+            "name": "data",
+            "type": "number[] | object[]",
+            "required": true,
+            "description": "数据：number[]（单系列）或 [{values:number[],label?:string,color?:string}]（多系列）"
+          },
+          {
+            "name": "labels",
+            "type": "string[]",
+            "required": false,
+            "description": "X 轴标签，缺省时使用序号"
+          },
+          {
+            "name": "width",
+            "type": "number",
+            "required": false,
+            "default": 400,
+            "description": "图表宽度（viewBox 单位）"
+          },
+          {
+            "name": "height",
+            "type": "number",
+            "required": false,
+            "default": 200,
+            "description": "图表高度（viewBox 单位）"
+          },
+          {
+            "name": "showGrid",
+            "type": "boolean",
+            "required": false,
+            "default": true,
+            "description": "是否显示网格线与 Y 轴刻度"
+          },
+          {
+            "name": "showDots",
+            "type": "boolean",
+            "required": false,
+            "default": true,
+            "description": "是否显示数据点"
+          }
+        ],
+        "examples": [
+          ":chart{title=\"销售趋势\" data=[10,25,18,32,28,45] labels=[\"一月\",\"二月\",\"三月\",\"四月\",\"五月\",\"六月\"]}",
+          ":chart{title=\"对比分析\" data=[{values=[10,20,30,40],label=\"产品A\"},{values=[15,25,20,35],label=\"产品B\",color=\"#16a34a\"}] labels=[\"Q1\",\"Q2\",\"Q3\",\"Q4\"]}"
+        ]
+      }
+    ]
+  },
+  "main": "index.html"
+}

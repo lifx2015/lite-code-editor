@@ -1,0 +1,64 @@
+{
+  "meta": {
+    "id": "mindmap",
+    "name": "脑图可视化",
+    "version": "1.0.0",
+    "author": "EditLite Team",
+    "description": "以树形布局展示思维导图，支持折叠展开、缩放拖拽与全屏查看。支持 :mindmap 指令与 mindmap 代码块。",
+    "directives": [
+      {
+        "name": "mindmap",
+        "description": "脑图（思维导图）可视化",
+        "params": [
+          {
+            "name": "direction",
+            "type": "string",
+            "required": false,
+            "default": "right",
+            "description": "展开方向: right / left"
+          },
+          {
+            "name": "data",
+            "type": "object",
+            "required": false,
+            "default": {
+              "id": "root",
+              "label": "中心主题",
+              "children": [
+                {
+                  "id": "branch1",
+                  "label": "分支一",
+                  "children": [
+                    { "id": "leaf1", "label": "子节点 1" },
+                    { "id": "leaf2", "label": "子节点 2" }
+                  ]
+                },
+                {
+                  "id": "branch2",
+                  "label": "分支二",
+                  "children": [
+                    { "id": "leaf3", "label": "子节点 3" }
+                  ]
+                },
+                {
+                  "id": "branch3",
+                  "label": "分支三",
+                  "children": [
+                    { "id": "leaf4", "label": "子节点 4" },
+                    { "id": "leaf5", "label": "子节点 5" }
+                  ]
+                }
+              ]
+            },
+            "description": "树根节点对象 {id, label, children:[...]}；缺省时使用内置示例数据"
+          }
+        ],
+        "examples": [
+          ":mindmap{direction=\"left\"}",
+          ":mindmap{direction=\"right\" data={id=\"root\" label=\"项目规划\" children=[{id=\"a\" label=\"需求分析\" children=[{id=\"a1\" label=\"用户调研\"},{id=\"a2\" label=\"竞品分析\"}]},{id=\"b\" label=\"设计\" children=[{id=\"b1\" label=\"UI 设计\"}]},{id=\"c\" label=\"开发\"}]}}"
+        ]
+      }
+    ]
+  },
+  "main": "index.html"
+}

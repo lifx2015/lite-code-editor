@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>链表可视化</title>
+  <style>
+    :root {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f7f8fa;
+      --bg-tertiary: #eef0f4;
+      --border-color: #e8eaed;
+      --border-color-strong: #d1d5db;
+      --text-primary: #111827;
+      --text-secondary: #6b7280;
+      --accent-color: #2563eb;
+      --accent-hover: #1d4ed8;
+      --bg-input: #f5f6f8;
+      --success-color: #10b981;
+    }
+
+    [data-theme="dark"] {
+      --bg-primary: #1a1a1f;
+      --bg-secondary: #141418;
+      --bg-tertiary: #22222a;
+      --border-color: #2e2e38;
+      --border-color-strong: #3e3e4a;
+      --text-primary: #e8e8ed;
+      --text-secondary: #9a9aaa;
+      --accent-color: #4a9eff;
+      --accent-hover: #3b8bdb;
+      --bg-input: #2a2a32;
+      --success-color: #34d399;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 8px;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    .linkedlist-visualizer {
+      padding: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin: 12px 0;
+    }
+
+    .visualizer-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .control-btn {
+      padding: 6px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .control-btn:hover {
+      background: var(--bg-tertiary);
+      border-color: var(--accent-color);
+    }
+
+    .control-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .step-info {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: SFMono-Regular, Consolas, monospace;
+    }
+
+    .linkedlist-container {
+      min-height: 150px;
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+
+    .linkedlist-container svg {
+      display: block;
+      margin: 0 auto;
+    }
+
+    .visualizer-description {
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .visualizer-info {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="linkedlist-visualizer">
+    <!-- 控制栏 -->
+    <div class="visualizer-controls">
+      <button id="btnTraverse" class="control-btn">🔄 遍历</button>
+      <button id="btnSearch" class="control-btn">🔍 搜索</button>
+      <button id="btnInsertHead" class="control-btn">➕ 头插</button>
+      <button id="btnInsertTail" class="control-btn">➕ 尾插</button>
+      <button id="btnDelete" class="control-btn">➖ 删除</button>
+      <button id="btnPlay" class="control-btn">▶ 播放</button>
+      <button id="btnStep" class="control-btn">⏭ 单步</button>
+      <button id="btnReset" class="control-btn">↺ 重置</button>
+      <span class="step-info" id="stepInfo">步骤: 0 / 0</span>
+    </div>
+
+    <!-- 可视化区域 -->
+    <div class="linkedlist-container">
+      <svg id="svg" width="100%" height="150" viewBox="0 0 600 150"></svg>
+    </div>
+
+    <!-- 描述 -->
+    <div class="visualizer-description" id="description" style="display:none"></div>
+
+    <!-- 链表信息 -->
+    <div class="visualizer-info">
+      <span id="typeInfo"></span>
+      <span id="countInfo"></span>
+      <span id="featureInfo"></span>
+    </div>
+  </div>
+
+  <script>
+    // ============================================
+    // 参数
+    // ============================================
+
+    const args = PluginRuntime.getResolvedArgs ? PluginRuntime.getResolvedArgs() : {
+      type: 'singly',
+      values: [10, 20, 30, 40, 50],
+      speed: 500,
+      ...(PluginRuntime.args || {})
+    };
+
+    const TYPE = (args.type === 'singly' || args.type === 'doubly' || args.type === 'circular')
+      ? args.type
+      : 'singly';
+    const INITIAL_VALUES = Array.isArray(args.values) && args.values.length
+      ? args.values.slice()
+      : [10, 20, 30, 40, 50];
+    const INSERT_VALUE = typeof args.insertValue === 'number' ? args.insertValue : undefined;
+    const SEARCH_VALUE = typeof args.searchValue === 'number' ? args.searchValue : undefined;
+    const DELETE_VALUE = typeof args.deleteValue === 'number' ? args.deleteValue : undefined;
+    const SPEED = typeof args.speed === 'number' ? args.speed : 500;
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+
+    // ============================================
+    // 链表数据结构与操作生成器
+    // ============================================
+
+    let nodeIdCounter = 0;
+    function generateNodeId() {
+      return 'node_' + (nodeIdCounter++);
+    }
+
+    function cloneNodes(nodes) {
+      const cloned = new Map();
+      nodes.forEach((node, id) => {
+        cloned.set(id, { ...node });
+      });
+      return cloned;
+    }
+
+    // 从头节点出发找到尾节点（带 visited 防止环导致死循环）
+    function findTailId(nodes, headId) {
+      let currentId = headId;
+      let tailId = headId;
+      const visited = new Set();
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId);
+        const node = nodes.get(currentId);
+        if (!node || !node.next || node.next === headId) {
+          tailId = currentId;
+          break;
+        }
+        currentId = node.next;
+      }
+      return tailId;
+    }
+
+    // 创建链表
+    function createList(values, type) {
+      nodeIdCounter = 0;
+      const nodes = new Map();
+
+      if (values.length === 0) {
+        return { nodes, headId: null, tailId: null };
+      }
+
+      const nodeIds = values.map(() => generateNodeId());
+
+      for (let i = 0; i < values.length; i++) {
+        const node = {
+          id: nodeIds[i],
+          value: values[i],
+          next: i < values.length - 1 ? nodeIds[i + 1] : (type === 'circular' ? nodeIds[0] : null),
+        };
+
+        // 双链表：设置前驱指针
+        if (type === 'doubly') {
+          node.prev = i > 0 ? nodeIds[i - 1] : null;
+        }
+
+        nodes.set(nodeIds[i], node);
+      }
+
+      return { nodes, headId: nodeIds[0], tailId: nodeIds[values.length - 1] };
+    }
+
+    // 遍历链表
+    function* traverseList(nodes, headId, type) {
+      if (!headId) {
+        yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: null, highlightIds: [], highlightType: 'current', description: '链表为空', operation: 'traverse' };
+        return;
+      }
+
+      yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: null, highlightIds: [], highlightType: 'current', description: '开始遍历', operation: 'traverse' };
+
+      let currentId = headId;
+      const visited = new Set();
+
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId);
+        const node = nodes.get(currentId);
+        if (!node) break;
+
+        yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId, highlightIds: [currentId], highlightType: 'current', description: `访问节点 ${node.value}`, operation: 'traverse' };
+
+        currentId = node.next;
+
+        // 环形链表检测
+        if (type === 'circular' && currentId === headId) {
+          yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId, highlightIds: [], highlightType: 'found', description: '回到头节点，遍历完成', operation: 'traverse' };
+          break;
+        }
+      }
+
+      yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: null, highlightIds: [], highlightType: 'found', description: '遍历完成', operation: 'traverse' };
+    }
+
+    // 搜索节点
+    function* searchList(nodes, headId, target, type) {
+      if (!headId) {
+        yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: null, highlightIds: [], highlightType: 'current', description: '链表为空', operation: 'search' };
+        return;
+      }
+
+      yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: null, highlightIds: [], highlightType: 'current', description: `搜索值 ${target}`, operation: 'search' };
+
+      let currentId = headId;
+      const visited = new Set();
+      let index = 0;
+
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId);
+        const node = nodes.get(currentId);
+        if (!node) break;
+
+        yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId, highlightIds: [currentId], highlightType: 'comparing', description: `比较节点 ${node.value} 与目标 ${target}`, operation: 'search' };
+
+        if (node.value === target) {
+          yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId, highlightIds: [currentId], highlightType: 'found', description: `找到值 ${target} 在位置 ${index}`, operation: 'search' };
+          return;
+        }
+
+        currentId = node.next;
+        index++;
+
+        if (type === 'circular' && currentId === headId) {
+          break;
+        }
+      }
+
+      yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: null, highlightIds: [], highlightType: 'current', description: `未找到值 ${target}`, operation: 'search' };
+    }
+
+    // 插入节点（头部）
+    function* insertHead(nodes, headId, value, type) {
+      const newNodeId = generateNodeId();
+      const newNode = {
+        id: newNodeId,
+        value,
+        next: headId,
+      };
+
+      yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: null, highlightIds: [newNodeId], highlightType: 'current', description: `创建新节点 ${value}`, operation: 'insert' };
+
+      // 添加新节点
+      nodes.set(newNodeId, newNode);
+
+      // 更新旧头节点的 prev
+      if (type === 'doubly' && headId) {
+        const oldHead = nodes.get(headId);
+        if (oldHead) {
+          oldHead.prev = newNodeId;
+        }
+      }
+
+      // 环形链表：更新尾节点
+      if (type === 'circular' && headId) {
+        const tailId = findTailId(nodes, headId);
+
+        // 尾节点指向新头节点
+        const tail = tailId ? nodes.get(tailId) : null;
+        if (tail) {
+          tail.next = newNodeId;
+        }
+
+        newNode.next = headId;
+      }
+
+      yield { nodes: cloneNodes(nodes), headId: newNodeId, tailId: null, currentId: newNodeId, highlightIds: [newNodeId], highlightType: 'found', description: `插入节点 ${value} 到头部`, operation: 'insert' };
+
+      return { newHeadId: newNodeId };
+    }
+
+    // 插入节点（尾部）
+    function* insertTail(nodes, headId, value, type) {
+      const newNodeId = generateNodeId();
+      const newNode = {
+        id: newNodeId,
+        value,
+        next: type === 'circular' ? headId : null,
+      };
+
+      yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: null, highlightIds: [newNodeId], highlightType: 'current', description: `创建新节点 ${value}`, operation: 'insert' };
+
+      if (!headId) {
+        nodes.set(newNodeId, newNode);
+        yield { nodes: cloneNodes(nodes), headId: newNodeId, tailId: newNodeId, currentId: newNodeId, highlightIds: [newNodeId], highlightType: 'found', description: `插入节点 ${value}（空链表）`, operation: 'insert' };
+        return { newHeadId: newNodeId };
+      }
+
+      nodes.set(newNodeId, newNode);
+
+      // 找到尾节点
+      const tailId = findTailId(nodes, headId);
+
+      const tail = tailId ? nodes.get(tailId) : null;
+      if (tail) {
+        tail.next = newNodeId;
+        if (type === 'doubly') {
+          newNode.prev = tailId;
+        }
+      }
+
+      yield {
+        nodes: cloneNodes(nodes),
+        headId,
+        tailId: newNodeId,
+        currentId: newNodeId,
+        highlightIds: [newNodeId, tailId].filter(Boolean),
+        highlightType: 'found',
+        description: `插入节点 ${value} 到尾部`,
+        operation: 'insert'
+      };
+
+      return { newHeadId: headId };
+    }
+
+    // 删除节点
+    function* deleteNode(nodes, headId, target, type) {
+      if (!headId) {
+        yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: null, highlightIds: [], highlightType: 'current', description: '链表为空', operation: 'delete' };
+        return;
+      }
+
+      yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: null, highlightIds: [], highlightType: 'current', description: `删除值 ${target}`, operation: 'delete' };
+
+      // 检查头节点
+      const head = nodes.get(headId);
+      if (head && head.value === target) {
+        yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: headId, highlightIds: [headId], highlightType: 'comparing', description: `头节点值匹配 ${target}`, operation: 'delete' };
+
+        const newHeadId = head.next;
+
+        // 环形链表：找尾节点更新
+        if (type === 'circular' && newHeadId) {
+          const tailId = findTailId(nodes, headId);
+          const tail = tailId ? nodes.get(tailId) : null;
+          if (tail) {
+            tail.next = newHeadId;
+          }
+        }
+
+        if (type === 'doubly' && newHeadId) {
+          const newHead = nodes.get(newHeadId);
+          if (newHead) {
+            newHead.prev = null;
+          }
+        }
+
+        nodes.delete(headId);
+
+        yield { nodes: cloneNodes(nodes), headId: newHeadId || null, tailId: null, currentId: null, highlightIds: [], highlightType: 'found', description: `删除头节点 ${target}`, operation: 'delete' };
+        return { newHeadId };
+      }
+
+      // 搜索要删除的节点
+      let prevId = null;
+      let currentId = headId;
+      const visited = new Set();
+
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId);
+        const node = nodes.get(currentId);
+        if (!node) break;
+
+        yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId, highlightIds: [currentId], highlightType: 'comparing', description: `比较节点 ${node.value}`, operation: 'delete' };
+
+        if (node.value === target) {
+          // 找到，删除
+          const prevNode = prevId ? nodes.get(prevId) : null;
+          if (prevNode) {
+            prevNode.next = node.next;
+          }
+
+          if (type === 'doubly' && node.next) {
+            const nextNode = nodes.get(node.next);
+            if (nextNode) {
+              nextNode.prev = prevId;
+            }
+          }
+
+          nodes.delete(currentId);
+
+          yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: null, highlightIds: [], highlightType: 'found', description: `删除节点 ${target}`, operation: 'delete' };
+          return { newHeadId: headId };
+        }
+
+        prevId = currentId;
+        currentId = node.next;
+      }
+
+      yield { nodes: cloneNodes(nodes), headId, tailId: null, currentId: null, highlightIds: [], highlightType: 'current', description: `未找到值 ${target}`, operation: 'delete' };
+    }
+
+    function collectSteps(gen) {
+      const collected = [];
+      let result = gen.next();
+      while (!result.done) {
+        collected.push(result.value);
+        result = gen.next();
+      }
+      return collected;
+    }
+
+    // ============================================
+    // 布局计算
+    // ============================================
+
+    function calculateLayout(nodes, headId, type, containerWidth) {
+      const result = [];
+      if (!headId || nodes.size === 0) return result;
+
+      const visited = new Set();
+      let currentId = headId;
+      let x = 50;
+      const y = 60;
+      const spacing = 100;
+
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId);
+        const node = nodes.get(currentId);
+        if (!node) break;
+
+        result.push({
+          id: node.id,
+          value: node.value,
+          x,
+          y,
+          nextId: node.next,
+          prevId: type === 'doubly' ? node.prev || null : null,
+        });
+
+        x += spacing;
+        if (x > containerWidth - 50) {
+          // 换行
+          x = 50;
+        }
+
+        currentId = node.next;
+
+        if (type === 'circular' && currentId === headId) break;
+      }
+
+      return result;
+    }
+
+    // ============================================
+    // 状态
+    // ============================================
+
+    let nodes = new Map();
+    let headId = null;
+    let highlightIds = [];
+    let highlightType = 'current';
+    let description = '';
+    let isPlaying = false;
+    let currentStep = 0;
+    let totalSteps = 0;
+    let steps = [];
+    let timer = null;
+    const initialValues = INITIAL_VALUES.slice();
+
+    // ============================================
+    // DOM 引用
+    // ============================================
+
+    const svgEl = document.getElementById('svg');
+    const stepInfoEl = document.getElementById('stepInfo');
+    const descEl = document.getElementById('description');
+    const typeInfoEl = document.getElementById('typeInfo');
+    const countInfoEl = document.getElementById('countInfo');
+    const featureInfoEl = document.getElementById('featureInfo');
+    const btnTraverse = document.getElementById('btnTraverse');
+    const btnSearch = document.getElementById('btnSearch');
+    const btnInsertHead = document.getElementById('btnInsertHead');
+    const btnInsertTail = document.getElementById('btnInsertTail');
+    const btnDelete = document.getElementById('btnDelete');
+    const btnPlay = document.getElementById('btnPlay');
+    const btnStep = document.getElementById('btnStep');
+    const btnReset = document.getElementById('btnReset');
+
+    const typeNames = {
+      singly: '单链表',
+      doubly: '双链表',
+      circular: '环形链表',
+    };
+
+    // ============================================
+    // SVG 渲染
+    // ============================================
+
+    function svgEl2(name) {
+      return document.createElementNS(SVG_NS, name);
+    }
+
+    function getNodeColor(nodeId) {
+      if (highlightIds.includes(nodeId)) {
+        switch (highlightType) {
+          case 'found': return '#22c55e';
+          case 'comparing': return '#eab308';
+          default: return '#3b82f6';
+        }
+      }
+      return 'var(--bg-primary)';
+    }
+
+    function renderSvg() {
+      while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+
+      // 箭头标记定义
+      const defs = svgEl2('defs');
+
+      const marker = svgEl2('marker');
+      marker.setAttribute('id', 'arrowhead');
+      marker.setAttribute('markerWidth', '10');
+      marker.setAttribute('markerHeight', '7');
+      marker.setAttribute('refX', '9');
+      marker.setAttribute('refY', '3.5');
+      marker.setAttribute('orient', 'auto');
+      const poly = svgEl2('polygon');
+      poly.setAttribute('points', '0 0, 10 3.5, 0 7');
+      poly.style.fill = 'var(--accent-color)';
+      marker.appendChild(poly);
+      defs.appendChild(marker);
+
+      const markerPurple = svgEl2('marker');
+      markerPurple.setAttribute('id', 'arrowhead-purple');
+      markerPurple.setAttribute('markerWidth', '10');
+      markerPurple.setAttribute('markerHeight', '7');
+      markerPurple.setAttribute('refX', '9');
+      markerPurple.setAttribute('refY', '3.5');
+      markerPurple.setAttribute('orient', 'auto');
+      const polyPurple = svgEl2('polygon');
+      polyPurple.setAttribute('points', '0 0, 10 3.5, 0 7');
+      polyPurple.style.fill = '#9333ea';
+      markerPurple.appendChild(polyPurple);
+      defs.appendChild(markerPurple);
+
+      svgEl.appendChild(defs);
+
+      const layoutNodes = calculateLayout(nodes, headId, TYPE, 600);
+
+      // 空链表提示
+      if (layoutNodes.length === 0) {
+        const empty = svgEl2('text');
+        empty.setAttribute('x', '300');
+        empty.setAttribute('y', '75');
+        empty.setAttribute('text-anchor', 'middle');
+        empty.setAttribute('font-size', '14');
+        empty.style.fill = 'var(--text-secondary)';
+        empty.textContent = '链表为空';
+        svgEl.appendChild(empty);
+        return;
+      }
+
+      layoutNodes.forEach((node, idx) => {
+        const nextNode = layoutNodes.find(n => n.id === node.nextId);
+        const prevNode = layoutNodes.find(n => n.id === node.prevId);
+
+        const group = svgEl2('g');
+
+        // 后继指针箭头
+        if (node.nextId && nextNode) {
+          const line = svgEl2('line');
+          line.setAttribute('x1', node.x + 30);
+          line.setAttribute('y1', node.y);
+          line.setAttribute('x2', nextNode.x - 30);
+          line.setAttribute('y2', nextNode.y);
+          line.setAttribute('stroke-width', '2');
+          line.setAttribute('marker-end', 'url(#arrowhead)');
+          line.style.stroke = 'var(--accent-color)';
+          group.appendChild(line);
+        }
+
+        // 前驱指针箭头（双链表）
+        if (TYPE === 'doubly' && node.prevId && prevNode) {
+          const line = svgEl2('line');
+          line.setAttribute('x1', node.x - 30);
+          line.setAttribute('y1', node.y + 20);
+          line.setAttribute('x2', prevNode.x + 30);
+          line.setAttribute('y2', prevNode.y + 20);
+          line.setAttribute('stroke-width', '2');
+          line.setAttribute('stroke-dasharray', '4,2');
+          line.setAttribute('marker-end', 'url(#arrowhead-purple)');
+          line.style.stroke = '#9333ea';
+          group.appendChild(line);
+        }
+
+        // 节点
+        const nodeGroup = svgEl2('g');
+        nodeGroup.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+
+        const highlighted = highlightIds.includes(node.id);
+
+        // 值区域
+        const rect = svgEl2('rect');
+        rect.setAttribute('x', '-25');
+        rect.setAttribute('y', '-20');
+        rect.setAttribute('width', '50');
+        rect.setAttribute('height', '40');
+        rect.setAttribute('rx', '6');
+        rect.setAttribute('stroke-width', highlighted ? '2' : '1');
+        rect.style.fill = getNodeColor(node.id);
+        rect.style.stroke = highlighted ? 'var(--text-primary)' : 'var(--border-color)';
+        nodeGroup.appendChild(rect);
+
+        const text = svgEl2('text');
+        text.setAttribute('x', '0');
+        text.setAttribute('y', '6');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('font-size', '14');
+        text.setAttribute('font-weight', '600');
+        text.style.fill = 'var(--text-primary)';
+        text.textContent = node.value;
+        nodeGroup.appendChild(text);
+
+        // 指针区域
+        const ptrRect = svgEl2('rect');
+        ptrRect.setAttribute('x', '25');
+        ptrRect.setAttribute('y', '-15');
+        ptrRect.setAttribute('width', '20');
+        ptrRect.setAttribute('height', '30');
+        ptrRect.setAttribute('rx', '4');
+        ptrRect.style.fill = 'var(--bg-tertiary)';
+        ptrRect.style.stroke = 'var(--border-color)';
+        nodeGroup.appendChild(ptrRect);
+
+        if (node.nextId) {
+          const circle = svgEl2('circle');
+          circle.setAttribute('cx', '35');
+          circle.setAttribute('cy', '0');
+          circle.setAttribute('r', '4');
+          circle.style.fill = 'var(--accent-color)';
+          nodeGroup.appendChild(circle);
+        }
+
+        // 前驱指针区域（双链表）
+        if (TYPE === 'doubly') {
+          const prevRect = svgEl2('rect');
+          prevRect.setAttribute('x', '-45');
+          prevRect.setAttribute('y', '-15');
+          prevRect.setAttribute('width', '20');
+          prevRect.setAttribute('height', '30');
+          prevRect.setAttribute('rx', '4');
+          prevRect.style.fill = 'var(--bg-tertiary)';
+          prevRect.style.stroke = 'var(--border-color)';
+          nodeGroup.appendChild(prevRect);
+
+          if (node.prevId) {
+            const prevCircle = svgEl2('circle');
+            prevCircle.setAttribute('cx', '-35');
+            prevCircle.setAttribute('cy', '0');
+            prevCircle.setAttribute('r', '4');
+            prevCircle.style.fill = '#9333ea';
+            nodeGroup.appendChild(prevCircle);
+          }
+        }
+
+        group.appendChild(nodeGroup);
+
+        // 头节点标记
+        if (idx === 0) {
+          const headLabel = svgEl2('text');
+          headLabel.setAttribute('x', node.x);
+          headLabel.setAttribute('y', node.y - 35);
+          headLabel.setAttribute('text-anchor', 'middle');
+          headLabel.setAttribute('font-size', '10');
+          headLabel.style.fill = 'var(--accent-color)';
+          headLabel.textContent = 'HEAD';
+          group.appendChild(headLabel);
+        }
+
+        svgEl.appendChild(group);
+      });
+    }
+
+    // ============================================
+    // 渲染与状态上报
+    // ============================================
+
+    function updateButtons() {
+      btnTraverse.disabled = isPlaying;
+      btnSearch.disabled = isPlaying;
+      btnInsertHead.disabled = isPlaying;
+      btnInsertTail.disabled = isPlaying;
+      btnDelete.disabled = isPlaying;
+      btnPlay.disabled = totalSteps === 0;
+      btnPlay.textContent = isPlaying ? '⏸ 暂停' : '▶ 播放';
+      btnStep.disabled = isPlaying || currentStep >= totalSteps;
+    }
+
+    function render() {
+      renderSvg();
+      stepInfoEl.textContent = `步骤: ${currentStep} / ${totalSteps}`;
+      if (description) {
+        descEl.style.display = '';
+        descEl.textContent = description;
+      } else {
+        descEl.style.display = 'none';
+      }
+      countInfoEl.textContent = `节点数: ${nodes.size}`;
+      updateButtons();
+    }
+
+    function notify(status) {
+      if (PluginRuntime.updateState) {
+        PluginRuntime.updateState({ status, currentStep, totalSteps });
+      }
+    }
+
+    // ============================================
+    // 操作步骤生成
+    // ============================================
+
+    function generateSteps(operation, value) {
+      const nodesCopy = cloneNodes(nodes);
+      let generator;
+
+      switch (operation) {
+        case 'traverse':
+          generator = traverseList(nodesCopy, headId, TYPE);
+          break;
+        case 'search':
+          generator = searchList(nodesCopy, headId, value === undefined ? (SEARCH_VALUE === undefined ? initialValues[0] : SEARCH_VALUE) : value, TYPE);
+          break;
+        case 'insertHead':
+          generator = insertHead(nodesCopy, headId, value === undefined ? (INSERT_VALUE === undefined ? Math.floor(Math.random() * 100) : INSERT_VALUE) : value, TYPE);
+          break;
+        case 'insertTail':
+          generator = insertTail(nodesCopy, headId, value === undefined ? (INSERT_VALUE === undefined ? Math.floor(Math.random() * 100) : INSERT_VALUE) : value, TYPE);
+          break;
+        case 'delete':
+          generator = deleteNode(nodesCopy, headId, value === undefined ? (DELETE_VALUE === undefined ? initialValues[0] : DELETE_VALUE) : value, TYPE);
+          break;
+        default:
+          return null;
+      }
+
+      return collectSteps(generator);
+    }
+
+    // ============================================
+    // 播放控制
+    // ============================================
+
+    function stopPlay() {
+      isPlaying = false;
+      if (timer) { clearTimeout(timer); timer = null; }
+    }
+
+    function doStep() {
+      if (currentStep >= totalSteps) return;
+      const stepData = steps[currentStep];
+      if (!stepData) return;
+
+      nodes = cloneNodes(stepData.nodes);
+      headId = stepData.headId;
+      highlightIds = stepData.highlightIds;
+      highlightType = stepData.highlightType;
+      description = stepData.description;
+      currentStep++;
+
+      if (currentStep >= totalSteps) {
+        stopPlay();
+        render();
+        notify('completed');
+      } else {
+        render();
+        notify(isPlaying ? 'playing' : 'paused');
+      }
+    }
+
+    function scheduleNext() {
+      if (!isPlaying) return;
+      timer = setTimeout(() => {
+        if (!isPlaying) return;
+        doStep();
+        if (isPlaying && currentStep < totalSteps) scheduleNext();
+      }, SPEED);
+    }
+
+    function startOperation(operation, value) {
+      const newSteps = generateSteps(operation, value);
+      if (!newSteps) return;
+
+      stopPlay();
+      steps = newSteps;
+      totalSteps = steps.length;
+      currentStep = 0;
+      isPlaying = true;
+
+      render();
+      notify('playing');
+      scheduleNext();
+    }
+
+    function play() {
+      if (currentStep < totalSteps) {
+        isPlaying = true;
+        updateButtons();
+        notify('playing');
+        scheduleNext();
+      }
+    }
+
+    function pause() {
+      stopPlay();
+      updateButtons();
+      notify('paused');
+    }
+
+    function stepOnce() {
+      if (isPlaying) return;
+      doStep();
+    }
+
+    function reset() {
+      stopPlay();
+      const created = createList(initialValues, TYPE);
+      nodes = created.nodes;
+      headId = created.headId;
+      highlightIds = [];
+      highlightType = 'current';
+      description = '';
+      steps = [];
+      currentStep = 0;
+      totalSteps = 0;
+      render();
+      notify('idle');
+    }
+
+    // ============================================
+    // 事件绑定
+    // ============================================
+
+    btnTraverse.addEventListener('click', () => startOperation('traverse'));
+    btnSearch.addEventListener('click', () => startOperation('search'));
+    btnInsertHead.addEventListener('click', () => startOperation('insertHead'));
+    btnInsertTail.addEventListener('click', () => startOperation('insertTail'));
+    btnDelete.addEventListener('click', () => startOperation('delete'));
+
+    btnPlay.addEventListener('click', () => {
+      if (isPlaying) {
+        pause();
+      } else {
+        play();
+      }
+    });
+
+    btnStep.addEventListener('click', stepOnce);
+    btnReset.addEventListener('click', reset);
+
+    typeInfoEl.textContent = `类型: ${typeNames[TYPE]}`;
+    featureInfoEl.textContent = `特点: ${TYPE === 'singly' ? '单向' : TYPE === 'doubly' ? '双向' : '首尾相连'}`;
+
+    // 参数变化时宿主会重新注入 iframe，无需额外处理
+    window.onArgsUpdate = function () {};
+
+    // 初始化链表
+    (function init() {
+      const created = createList(initialValues, TYPE);
+      nodes = created.nodes;
+      headId = created.headId;
+      render();
+      notify('idle');
+    })();
+  </script>
+</body>
+</html>

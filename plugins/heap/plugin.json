@@ -1,0 +1,50 @@
+{
+  "meta": {
+    "id": "heap",
+    "name": "堆可视化",
+    "version": "1.0.0",
+    "author": "EditLite Team",
+    "description": "以动画方式展示最大堆 / 最小堆的构建、插入与移除堆顶操作，同时呈现树形结构与数组表示。",
+    "directives": [
+      {
+        "name": "heap",
+        "description": "堆可视化",
+        "params": [
+          {
+            "name": "type",
+            "type": "string",
+            "required": false,
+            "default": "max",
+            "description": "堆类型: max / min"
+          },
+          {
+            "name": "values",
+            "type": "number[]",
+            "required": false,
+            "default": [50, 30, 70, 20, 40, 60, 80, 10, 25],
+            "description": "初始数组"
+          },
+          {
+            "name": "insertValue",
+            "type": "number",
+            "required": false,
+            "description": "点击“插入”时插入的值（缺省随机）"
+          },
+          {
+            "name": "speed",
+            "type": "number",
+            "required": false,
+            "default": 600,
+            "description": "动画速度（毫秒）"
+          }
+        ],
+        "examples": [
+          ":heap{}",
+          ":heap{type=\"min\"}",
+          ":heap{type=\"max\" values=[100,50,75,25,60]}"
+        ]
+      }
+    ]
+  },
+  "main": "index.html"
+}

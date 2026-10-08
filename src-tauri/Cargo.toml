@@ -29,6 +29,8 @@ tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-fs = "2"
 notify = "6"
+sha2 = "0.10"
+tempfile = "3"
 
 [profile.release]
 # 优化启动速度和二进制大小

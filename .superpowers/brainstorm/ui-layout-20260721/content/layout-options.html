@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>布局方向</title>
+<style>
+  *{box-sizing:border-box} body{margin:0;background:#111318;color:#e8ecf3;font-family:"Segoe UI",system-ui,sans-serif;padding:28px;line-height:1.4}
+  h1{margin:0 0 8px;font-size:24px}.intro{margin:0 0 24px;color:#aab3c2}.grid{display:grid;grid-template-columns:repeat(3,minmax(240px,1fr));gap:18px}.option{background:#1a1e26;border:1px solid #303746;border-radius:12px;padding:14px;cursor:pointer;transition:.18s}.option:hover,.option.selected{border-color:#55a4ff;box-shadow:0 0 0 3px rgba(85,164,255,.15)}.option h2{font-size:16px;margin:2px 0 4px}.option>p{font-size:13px;color:#aab3c2;margin:0 0 14px}.app{height:250px;border:1px solid #323948;border-radius:8px;overflow:hidden;background:#181b21;font-size:9px;color:#b6bfcd}.top{height:30px;display:flex;align-items:center;gap:8px;padding:0 9px;background:#222832;border-bottom:1px solid #323948}.brand{font-weight:700;color:#f2f6ff}.tools{margin-left:auto;color:#7e8ca2}.tabs{height:27px;display:flex;align-items:end;padding-left:7px;gap:2px;background:#181b21}.tab{padding:7px 9px;background:#272e39;border-radius:5px 5px 0 0}.tab.active{color:#fff;background:#303947;border-bottom:2px solid #55a4ff}.content{display:flex;height:193px}.side{width:55px;padding:9px 7px;background:#20252e;border-right:1px solid #303746;color:#8692a6}.side div{padding:5px 0}.main{flex:1;padding:12px;position:relative;background:repeating-linear-gradient(0deg,transparent,transparent 18px,rgba(255,255,255,.025) 19px)}.code{font-family:Consolas,monospace;color:#bfccdd;line-height:19px}.num{color:#586274;margin-right:8px}.status{position:absolute;bottom:0;left:0;right:0;height:21px;padding:5px 9px;color:#8794a9;background:#20252e;border-top:1px solid #303746}.rail{width:35px;background:#171a20;border-right:1px solid #303746;padding-top:8px;text-align:center;color:#8794a9}.command{position:absolute;top:48px;left:15%;right:15%;padding:8px;background:#2b3340;border:1px solid #4e5b70;border-radius:5px;color:#aebbd0}.split-main{display:grid;grid-template-columns:1fr 1fr}.preview{border-left:1px solid #303746;padding:13px;color:#cfd7e4}.preview h3{font-size:14px;margin:0 0 9px;color:#fff}.preview p{color:#8f9bb0}.label{font-size:11px;font-weight:700;letter-spacing:.08em;color:#55a4ff}.foot{font-size:12px;color:#aab3c2;margin-top:12px}.badge{float:right;color:#67d6a2;font-size:11px}
+  @media(max-width:850px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <h1>选择整体工作区布局</h1>
+  <p class="intro">目标：让代码编辑保持专注，同时把常用操作放到更易发现且不打断输入的位置。点击一个方案即可选中。</p>
+  <div class="grid">
+    <section class="option" data-choice="focus" onclick="toggleSelect(this)">
+      <div class="label">A · 推荐 <span class="badge">高专注</span></div><h2>沉浸式编辑器</h2><p>默认隐藏侧栏；工具栏只保留高频动作，使用命令面板承载次级功能。</p>
+      <div class="app"><div class="top"><span class="brand">LITE</span><span>文件 ▾</span><span>编辑 ▾</span><span class="tools">⌕　☼　···</span></div><div class="tabs"><span class="tab active">config.json</span><span class="tab">README.md</span><span class="tab">＋</span></div><div class="content"><div class="main"><div class="code"><span class="num">1</span>{<br><span class="num">2</span>&nbsp;&nbsp;"name": "lite",<br><span class="num">3</span>&nbsp;&nbsp;"version": "1.0"<br><span class="num">4</span>}</div><div class="command">⌘　搜索命令、打开文件、切换主题…</div><div class="status">JSON　　Ln 3, Col 18 <span style="float:right">UTF-8　100%</span></div></div></div></div>
+      <p class="foot">适合轻量代码编辑器：界面最干净，学习成本最低。</p>
+    </section>
+    <section class="option" data-choice="workspace" onclick="toggleSelect(this)">
+      <div class="label">B <span class="badge">高效率</span></div><h2>可折叠工作台</h2><p>左侧为可收起的资源轨道，按需展开文件、搜索、问题与插件。</p>
+      <div class="app"><div class="top"><span class="brand">LITE</span><span class="tools">⌕　☼　⚙</span></div><div class="tabs"><span class="tab active">config.json</span><span class="tab">＋</span></div><div class="content"><div class="rail">▤<br><br>⌕<br><br>⚠<br><br>◫</div><div class="side"><b>资源管理器</b><div>⌄ 项目</div><div>　config.json</div><div>　README.md</div><div>　src</div></div><div class="main"><div class="code"><span class="num">1</span>{<br><span class="num">2</span>&nbsp;&nbsp;"name": "lite",<br><span class="num">3</span>&nbsp;&nbsp;"version": "1.0"<br><span class="num">4</span>}</div><div class="status">JSON　　Ln 3, Col 18</div></div></div></div>
+      <p class="foot">适合多文件作业；收起后仍可回到专注编辑状态。</p>
+    </section>
+    <section class="option" data-choice="document" onclick="toggleSelect(this)">
+      <div class="label">C <span class="badge">内容友好</span></div><h2>文档双栏模式</h2><p>编辑器与预览/问题面板并排；适合 Markdown、JSON 和配置文件校验。</p>
+      <div class="app"><div class="top"><span class="brand">LITE</span><span>预览　问题(1)</span><span class="tools">☼　···</span></div><div class="tabs"><span class="tab active">config.json</span><span class="tab">＋</span></div><div class="content split-main"><div class="main"><div class="code"><span class="num">1</span>{<br><span class="num">2</span>&nbsp;&nbsp;"name": "lite",<br><span class="num">3</span>&nbsp;&nbsp;"version": "1.0"<br><span class="num">4</span>}</div><div class="status">Ln 3, Col 18</div></div><div class="preview"><h3>结构预览</h3><p>name<br>version</p><hr style="border-color:#303746"><b style="color:#ff7d7d">问题 · 1</b><p>第 3 行：缺少逗号</p></div></div></div>
+      <p class="foot">适合格式化、预览和诊断；小尺寸窗口会压缩编辑空间。</p>
+    </section>
+  </div>
+</body>
+</html>

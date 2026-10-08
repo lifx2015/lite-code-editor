@@ -31,18 +31,19 @@ A lightweight text editor built on Tauri, focusing on simplicity and efficiency.
 - **分屏模式** - 左侧编辑，右侧实时预览
 - **预览模式** - 纯预览视图
 - **GitHub 风格 Markdown** - 支持 GFM 扩展语法（表格、任务列表等）
-- **增强预览模式** - 支持算法可视化等交互式组件
+- **统一预览** - 同一预览中直接渲染算法可视化等交互式组件，无需切换模式
 
-### 增强型预览（算法可视化）
+### 算法可视化（增强组件）
 
 lite-code-editor 内置了算法可视化功能，无需安装插件。在 Markdown 中使用特殊指令即可展示动态算法演示。
 
+> 点击工具栏的 **🧩 增强功能** 按钮，可在应用内查看所有内置增强能力的分类、参数、可选值与使用示例，并一键插入到当前文档，方便快速上手。
+
 #### 使用方法
 
-1. 在 Markdown 文件中输入指令语法
-2. 切换到**分屏**或**预览**模式
-3. 点击预览区上方的 **"增强"** 按钮激活增强预览
-4. 使用控制按钮操作动画
+1. 在 Markdown 文件中输入指令语法（或从「增强功能」面板插入示例）
+2. 切换到**分屏**或**预览**模式即可自动渲染
+3. 使用控制按钮操作动画
 
 #### 内置组件
 
@@ -158,12 +159,10 @@ lite-code-editor/
 │   ├── core/types/               # 类型定义
 │   │   └── directive.ts          # 指令类型
 │   ├── plugins/                  # 插件系统
-│   │   ├── remark-directive-custom.ts  # 指令解析插件
 │   │   └── component-registry.ts       # 组件注册表
 │   ├── components/               # UI 组件
 │   │   ├── PreviewEngine/        # 双模式预览引擎
-│   │   ├── ExternalPluginLoader/ # 外部插件加载器
-│   │   └── PluginSandbox/        # 插件沙箱
+│   │   └── ExternalPluginLoader/ # 外部插件加载器
 │   └── visualizers/              # 可视化组件
 │       └── algorithms/           # 算法可视化
 │           └── SortVisualizer.tsx
@@ -205,7 +204,7 @@ lite-code-editor/
 - [x] 查找替换功能
 - [x] 深色主题
 - [x] 支持更多语法高亮
-- [x] 增强型预览引擎（双模式）
+- [x] 统一增强预览引擎
 - [x] 排序算法可视化
 - [ ] 查找算法可视化
 - [ ] 图论算法可视化
@@ -222,4 +221,4 @@ MIT License
 
 ## 更多文档
 
-- [开发使用手册](./DEVELOPMENT.md) - 增强型预览功能的详细使用指南和开发文档
+- [开发使用手册](./DEVELOPMENT.md) - 预览功能与插件系统的详细使用指南和开发文档

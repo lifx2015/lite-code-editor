@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>脑图可视化</title>
+  <style>
+    :root { --bg-primary:#ffffff; --bg-secondary:#f7f8fa; --bg-tertiary:#eef0f4; --border-color:#e8eaed; --border-color-strong:#d1d5db; --text-primary:#111827; --text-secondary:#6b7280; --accent-color:#2563eb; --accent-hover:#1d4ed8; --bg-input:#f5f6f8; --success-color:#10b981; }
+    [data-theme="dark"] { --bg-primary:#1a1a1f; --bg-secondary:#141418; --bg-tertiary:#22222a; --border-color:#2e2e38; --border-color-strong:#3e3e4a; --text-primary:#e8e8ed; --text-secondary:#9a9aaa; --accent-color:#4a9eff; --accent-hover:#3b8bdb; --bg-input:#2a2a32; --success-color:#34d399; }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 8px;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    .mindmap-visualizer {
+      padding: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin: 0;
+    }
+
+    .visualizer-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .control-btn {
+      padding: 6px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .control-btn:hover {
+      background: var(--bg-tertiary);
+      border-color: var(--accent-color);
+    }
+
+    .control-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .zoom-info,
+    .node-count {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-left: 12px;
+      font-family: SFMono-Regular, Consolas, monospace;
+    }
+
+    .mindmap-container {
+      height: 400px;
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .mindmap-container svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .mindmap-node {
+      transition: fill 0.2s, stroke 0.2s, transform 0.15s;
+    }
+
+    .mindmap-node:hover {
+      filter: brightness(1.1);
+    }
+
+    .visualizer-description {
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    /* 脑图全屏模式（CSS 回退方案） */
+    .mindmap-visualizer.fullscreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 9999;
+      margin: 0;
+      border-radius: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mindmap-visualizer.fullscreen .mindmap-container {
+      flex: 1;
+      height: auto;
+      border-radius: 0;
+    }
+
+    .mindmap-visualizer.fullscreen .visualizer-controls {
+      flex-shrink: 0;
+      padding: 12px 16px;
+      margin-bottom: 0;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .mindmap-visualizer.fullscreen .visualizer-description {
+      flex-shrink: 0;
+      padding: 8px 16px;
+      background: var(--bg-tertiary);
+      border-top: 1px solid var(--border-color);
+    }
+  </style>
+</head>
+<body>
+  <div class="mindmap-visualizer" id="wrapper">
+    <!-- 控制栏 -->
+    <div class="visualizer-controls">
+      <button id="btnZoomIn" class="control-btn" title="放大">🔍+</button>
+      <button id="btnZoomOut" class="control-btn" title="缩小">🔍-</button>
+      <button id="btnReset" class="control-btn" title="重置视图">⟲ 重置</button>
+      <button id="btnFullscreen" class="control-btn" title="全屏显示">⛶ 全屏</button>
+      <span class="zoom-info" id="zoomInfo">100%</span>
+      <span class="node-count" id="nodeCount">节点: 0</span>
+    </div>
+
+    <!-- 可视化区域 -->
+    <div class="visualizer-container mindmap-container" id="container">
+      <svg id="mindmapSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+
+    <!-- 提示信息 -->
+    <div class="visualizer-description">
+      点击节点展开/折叠子节点 | Ctrl+Shift+滚轮缩放 | 拖拽移动画布 | ESC退出全屏
+    </div>
+  </div>
+
+  <script>
+    // ============================================
+    // 参数解析
+    // ============================================
+
+    const BUILTIN_DATA = {
+      id: 'root',
+      label: '中心主题',
+      children: [
+        {
+          id: 'branch1',
+          label: '分支一',
+          children: [
+            { id: 'leaf1', label: '子节点 1' },
+            { id: 'leaf2', label: '子节点 2' },
+          ],
+        },
+        {
+          id: 'branch2',
+          label: '分支二',
+          children: [
+            { id: 'leaf3', label: '子节点 3' },
+          ],
+        },
+        {
+          id: 'branch3',
+          label: '分支三',
+          children: [
+            { id: 'leaf4', label: '子节点 4' },
+            { id: 'leaf5', label: '子节点 5' },
+          ],
+        },
+      ],
+    };
+
+    const args = PluginRuntime.getResolvedArgs
+      ? PluginRuntime.getResolvedArgs()
+      : { direction: 'right', data: BUILTIN_DATA, ...(PluginRuntime.args || {}) };
+
+    const direction = args.direction === 'left' ? 'left' : 'right';
+
+    let idCounter = 0;
+
+    function normalizeNode(raw) {
+      if (!raw || typeof raw !== 'object') return null;
+      const normalized = {
+        id: raw.id != null && raw.id !== '' ? String(raw.id) : 'node-' + (++idCounter),
+        label: String(raw.label != null ? raw.label : (raw.name != null ? raw.name : '')),
+        collapsed: !!raw.collapsed,
+      };
+      const children = Array.isArray(raw.children)
+        ? raw.children.map(normalizeNode).filter(Boolean)
+        : [];
+      if (children.length) normalized.children = children;
+      return normalized;
+    }
+
+    function parseData(raw) {
+      if (typeof raw === 'string') {
+        try {
+          return JSON.parse(raw);
+        } catch (e) {
+          return null;
+        }
+      }
+      return raw;
+    }
+
+    const rawData = parseData(args.data) || BUILTIN_DATA;
+    const initialRoot = normalizeNode(rawData) || normalizeNode(BUILTIN_DATA);
+
+    // ============================================
+    // 布局计算
+    // ============================================
+
+    const NODE_WIDTH = 120;
+    const NODE_HEIGHT = 36;
+    const H_GAP = 60;
+    const V_GAP = 12;
+
+    // 计算子树高度
+    function calculateSubtreeHeight(node) {
+      if (!node.children || node.children.length === 0 || node.collapsed) {
+        return NODE_HEIGHT;
+      }
+      const childrenHeight = node.children.reduce((sum, child) => {
+        return sum + calculateSubtreeHeight(child) + V_GAP;
+      }, -V_GAP);
+      return Math.max(NODE_HEIGHT, childrenHeight);
+    }
+
+    // 布局算法
+    function calculateLayout(node, x, y, dir, depth, parent) {
+      depth = depth === undefined ? 0 : depth;
+      const nodes = [];
+
+      const subtreeHeight = calculateSubtreeHeight(node);
+      const layoutNode = {
+        id: node.id,
+        label: node.label,
+        collapsed: node.collapsed,
+        children: node.children,
+        x: x,
+        y: y + subtreeHeight / 2 - NODE_HEIGHT / 2,
+        width: NODE_WIDTH,
+        height: NODE_HEIGHT,
+        depth: depth,
+        parent: parent,
+      };
+      nodes.push(layoutNode);
+
+      if (node.children && node.children.length > 0 && !node.collapsed) {
+        let currentY = y;
+        const nextX = dir === 'left' ? x - NODE_WIDTH - H_GAP : x + NODE_WIDTH + H_GAP;
+
+        for (const child of node.children) {
+          const childHeight = calculateSubtreeHeight(child);
+          const childNodes = calculateLayout(child, nextX, currentY, dir, depth + 1, layoutNode);
+          for (const cn of childNodes) nodes.push(cn);
+          currentY += childHeight + V_GAP;
+        }
+      }
+
+      return nodes;
+    }
+
+    // 收集所有边
+    function collectEdges(nodes) {
+      const edges = [];
+      for (const node of nodes) {
+        if (node.parent) {
+          edges.push({ from: node.parent, to: node });
+        }
+      }
+      return edges;
+    }
+
+    // ============================================
+    // 状态与渲染
+    // ============================================
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const wrapperEl = document.getElementById('wrapper');
+    const containerEl = document.getElementById('container');
+    const svgEl = document.getElementById('mindmapSvg');
+    const zoomInfoEl = document.getElementById('zoomInfo');
+    const nodeCountEl = document.getElementById('nodeCount');
+    const btnZoomIn = document.getElementById('btnZoomIn');
+    const btnZoomOut = document.getElementById('btnZoomOut');
+    const btnReset = document.getElementById('btnReset');
+    const btnFullscreen = document.getElementById('btnFullscreen');
+
+    let rootNode = initialRoot;
+    let selectedId = null;
+    let zoom = 1;
+    let pan = { x: 50, y: 50 };
+    let isDragging = false;
+    let dragStart = { x: 0, y: 0 };
+
+    // 切换折叠状态
+    function toggleCollapse(nodeId) {
+      function toggle(node) {
+        if (node.id === nodeId) {
+          return {
+            id: node.id,
+            label: node.label,
+            collapsed: !node.collapsed,
+            children: node.children,
+          };
+        }
+        if (node.children) {
+          return {
+            id: node.id,
+            label: node.label,
+            collapsed: node.collapsed,
+            children: node.children.map(toggle),
+          };
+        }
+        return node;
+      }
+      rootNode = toggle(rootNode);
+    }
+
+    function getLayout() {
+      const layoutNodes = calculateLayout(rootNode, 100, 0, direction);
+      const edges = collectEdges(layoutNodes);
+
+      let bounds = { minX: 0, maxX: 800, minY: 0, maxY: 400 };
+      if (layoutNodes.length > 0) {
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const node of layoutNodes) {
+          minX = Math.min(minX, node.x);
+          maxX = Math.max(maxX, node.x + node.width);
+          minY = Math.min(minY, node.y);
+          maxY = Math.max(maxY, node.y + node.height);
+        }
+        bounds = { minX, maxX, minY, maxY };
+      }
+
+      const svgWidth = Math.max(800, bounds.maxX - bounds.minX + 200);
+      const svgHeight = Math.max(400, bounds.maxY - bounds.minY + 100);
+
+      return { layoutNodes, edges, svgWidth, svgHeight };
+    }
+
+    function truncateLabel(label) {
+      const text = label == null ? '' : String(label);
+      return text.length > 10 ? text.slice(0, 10) + '...' : text;
+    }
+
+    function render() {
+      const { layoutNodes, edges, svgWidth, svgHeight } = getLayout();
+
+      svgEl.setAttribute(
+        'viewBox',
+        (-pan.x) + ' ' + (-pan.y) + ' ' + (svgWidth / zoom) + ' ' + (svgHeight / zoom)
+      );
+      svgEl.style.cursor = isDragging ? 'grabbing' : 'grab';
+
+      svgEl.innerHTML = '';
+
+      // 边
+      for (let idx = 0; idx < edges.length; idx++) {
+        const edge = edges[idx];
+        const fromX = edge.from.x + NODE_WIDTH;
+        const fromY = edge.from.y + NODE_HEIGHT / 2;
+        const toX = edge.to.x;
+        const toY = edge.to.y + NODE_HEIGHT / 2;
+        const midX = (fromX + toX) / 2;
+
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute(
+          'd',
+          'M ' + fromX + ' ' + fromY + ' C ' + midX + ' ' + fromY + ', ' + midX + ' ' + toY + ', ' + toX + ' ' + toY
+        );
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', 'var(--accent-color)');
+        path.setAttribute('stroke-width', '2');
+        path.setAttribute('opacity', '0.6');
+        svgEl.appendChild(path);
+      }
+
+      // 节点
+      for (const node of layoutNodes) {
+        const isSelected = selectedId === node.id;
+        const hasChildren = node.children && node.children.length > 0;
+        const isCollapsed = node.collapsed;
+
+        const group = document.createElementNS(SVG_NS, 'g');
+        group.setAttribute('transform', 'translate(' + node.x + ', ' + node.y + ')');
+        group.style.cursor = 'pointer';
+
+        group.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (hasChildren) toggleCollapse(node.id);
+          selectedId = node.id;
+          render();
+        });
+
+        // 节点背景
+        const rect = document.createElementNS(SVG_NS, 'rect');
+        rect.setAttribute('width', node.width);
+        rect.setAttribute('height', node.height);
+        rect.setAttribute('rx', '8');
+        rect.setAttribute('fill', isSelected ? 'var(--accent-color)' : 'var(--bg-tertiary)');
+        rect.setAttribute('stroke', isSelected ? 'var(--accent-hover)' : 'var(--border-color-strong)');
+        rect.setAttribute('stroke-width', isSelected ? '2' : '1');
+        rect.setAttribute('class', 'mindmap-node');
+        group.appendChild(rect);
+
+        // 节点文字
+        const text = document.createElementNS(SVG_NS, 'text');
+        text.setAttribute('x', node.width / 2);
+        text.setAttribute('y', node.height / 2);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('fill', isSelected ? 'white' : 'var(--text-primary)');
+        text.setAttribute('font-size', '13');
+        text.setAttribute('font-weight', '500');
+        text.textContent = truncateLabel(node.label);
+        group.appendChild(text);
+
+        // 折叠/展开指示器
+        if (hasChildren) {
+          const indicator = document.createElementNS(SVG_NS, 'g');
+          indicator.setAttribute('transform', 'translate(' + (node.width - 16) + ', ' + (node.height / 2) + ')');
+
+          const circle = document.createElementNS(SVG_NS, 'circle');
+          circle.setAttribute('r', '8');
+          circle.setAttribute('fill', isSelected ? 'rgba(255,255,255,0.3)' : 'var(--bg-input)');
+          circle.setAttribute('stroke', isSelected ? 'white' : 'var(--border-color-strong)');
+          circle.setAttribute('stroke-width', '1');
+          indicator.appendChild(circle);
+
+          const sign = document.createElementNS(SVG_NS, 'text');
+          sign.setAttribute('text-anchor', 'middle');
+          sign.setAttribute('dominant-baseline', 'middle');
+          sign.setAttribute('fill', isSelected ? 'white' : 'var(--text-secondary)');
+          sign.setAttribute('font-size', '12');
+          sign.setAttribute('font-weight', 'bold');
+          sign.textContent = isCollapsed ? '+' : '−';
+          indicator.appendChild(sign);
+
+          group.appendChild(indicator);
+        }
+
+        svgEl.appendChild(group);
+      }
+
+      zoomInfoEl.textContent = Math.round(zoom * 100) + '%';
+      nodeCountEl.textContent = '节点: ' + layoutNodes.length;
+      btnFullscreen.textContent = isFullscreen ? '⛶ 退出全屏' : '⛶ 全屏';
+    }
+
+    function notify(status) {
+      if (PluginRuntime.updateState) {
+        const { layoutNodes } = getLayout();
+        PluginRuntime.updateState({ status, nodeCount: layoutNodes.length, zoom: Math.round(zoom * 100) / 100 });
+      }
+    }
+
+    // ============================================
+    // 缩放控制
+    // ============================================
+
+    function handleZoomIn() {
+      zoom = Math.min(2, zoom + 0.1);
+      render();
+      notify('idle');
+    }
+
+    function handleZoomOut() {
+      zoom = Math.max(0.3, zoom - 0.1);
+      render();
+      notify('idle');
+    }
+
+    function handleResetZoom() {
+      zoom = 1;
+      pan = { x: 50, y: 50 };
+      render();
+      notify('idle');
+    }
+
+    // ============================================
+    // 拖拽处理
+    // ============================================
+
+    function handleMouseDown(e) {
+      if (e.target && e.target.tagName === 'svg') {
+        isDragging = true;
+        dragStart = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+        svgEl.style.cursor = 'grabbing';
+      }
+    }
+
+    function handleMouseMove(e) {
+      if (isDragging) {
+        pan = { x: e.clientX - dragStart.x, y: e.clientY - dragStart.y };
+        render();
+      }
+    }
+
+    function handleMouseUp() {
+      if (!isDragging) return;
+      isDragging = false;
+      svgEl.style.cursor = 'grab';
+    }
+
+    // 滚轮缩放（需要 Ctrl+Shift）
+    function handleWheel(e) {
+      if (e.ctrlKey && e.shiftKey) {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        zoom = Math.max(0.3, Math.min(3, zoom + delta));
+        render();
+        notify('idle');
+      }
+    }
+
+    // ============================================
+    // 全屏处理（requestFullscreen 在沙箱中可能被拒绝，回退到 CSS 全屏）
+    // ============================================
+
+    let isFullscreen = false;
+
+    function setCssFullscreen(on) {
+      if (on) {
+        wrapperEl.classList.add('fullscreen');
+      } else {
+        wrapperEl.classList.remove('fullscreen');
+      }
+      isFullscreen = on;
+      render();
+    }
+
+    function enterFullscreen() {
+      let requested = false;
+      try {
+        if (containerEl.requestFullscreen) {
+          const result = containerEl.requestFullscreen();
+          requested = true;
+          if (result && typeof result.catch === 'function') {
+            result.catch(() => setCssFullscreen(true));
+          }
+        } else if (wrapperEl.requestFullscreen) {
+          const result = wrapperEl.requestFullscreen();
+          requested = true;
+          if (result && typeof result.catch === 'function') {
+            result.catch(() => setCssFullscreen(true));
+          }
+        }
+      } catch (err) {
+        requested = false;
+      }
+      if (!requested) setCssFullscreen(true);
+    }
+
+    function exitFullscreen() {
+      try {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          const result = document.exitFullscreen();
+          if (result && typeof result.catch === 'function') result.catch(() => {});
+        }
+      } catch (err) {
+        // ignore
+      }
+      setCssFullscreen(false);
+    }
+
+    function toggleFullscreen() {
+      if (isFullscreen || document.fullscreenElement) {
+        exitFullscreen();
+      } else {
+        enterFullscreen();
+      }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+      const native = !!document.fullscreenElement;
+      if (native) {
+        isFullscreen = true;
+      } else if (!wrapperEl.classList.contains('fullscreen')) {
+        isFullscreen = false;
+      }
+      render();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        exitFullscreen();
+      }
+    });
+
+    // ============================================
+    // 事件绑定
+    // ============================================
+
+    btnZoomIn.addEventListener('click', handleZoomIn);
+    btnZoomOut.addEventListener('click', handleZoomOut);
+    btnReset.addEventListener('click', handleResetZoom);
+    btnFullscreen.addEventListener('click', toggleFullscreen);
+
+    svgEl.addEventListener('mousedown', handleMouseDown);
+    svgEl.addEventListener('mousemove', handleMouseMove);
+    svgEl.addEventListener('mouseup', handleMouseUp);
+    svgEl.addEventListener('mouseleave', handleMouseUp);
+    svgEl.addEventListener('wheel', handleWheel, { passive: false });
+
+    // 参数变化时宿主会重新注入 iframe，无需额外处理
+    window.onArgsUpdate = function () {};
+
+    render();
+    notify('idle');
+  </script>
+</body>
+</html>

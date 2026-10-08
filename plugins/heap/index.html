@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>堆可视化</title>
+  <style>
+    :root {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f7f8fa;
+      --bg-tertiary: #eef0f4;
+      --border-color: #e8eaed;
+      --border-color-strong: #d1d5db;
+      --text-primary: #111827;
+      --text-secondary: #6b7280;
+      --accent-color: #2563eb;
+      --accent-hover: #1d4ed8;
+      --bg-input: #f5f6f8;
+      --success-color: #10b981;
+    }
+
+    [data-theme="dark"] {
+      --bg-primary: #1a1a1f;
+      --bg-secondary: #141418;
+      --bg-tertiary: #22222a;
+      --border-color: #2e2e38;
+      --border-color-strong: #3e3e4a;
+      --text-primary: #e8e8ed;
+      --text-secondary: #9a9aaa;
+      --accent-color: #4a9eff;
+      --accent-hover: #3b8bdb;
+      --bg-input: #2a2a32;
+      --success-color: #34d399;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 8px;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    .heap-visualizer {
+      padding: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin: 12px 0;
+    }
+
+    .visualizer-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .control-btn {
+      padding: 6px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .control-btn:hover {
+      background: var(--bg-tertiary);
+      border-color: var(--accent-color);
+    }
+
+    .control-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .step-info {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: SFMono-Regular, Consolas, monospace;
+    }
+
+    .visualizer-container {
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+    }
+
+    .heap-container {
+      height: 350px;
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      overflow: auto;
+    }
+
+    .heap-node {
+      transition: fill 0.2s, stroke 0.2s;
+    }
+
+    .heap-array-view,
+    .heapArray-view {
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+    }
+
+    .array-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-right: 8px;
+    }
+
+    .array-container {
+      display: flex;
+      gap: 4px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .array-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 40px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      transition: background-color 0.15s, transform 0.15s;
+    }
+
+    .array-item.highlighted {
+      transform: scale(1.1);
+    }
+
+    .array-index {
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+
+    .array-value {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .visualizer-description {
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .visualizer-info {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="heap-visualizer">
+    <div class="visualizer-controls">
+      <button id="btnInsert" class="control-btn">➕ 插入</button>
+      <button id="btnExtract" class="control-btn">➖ 移除堆顶</button>
+      <button id="btnPlay" class="control-btn">▶ 播放</button>
+      <button id="btnStep" class="control-btn">⏭ 单步</button>
+      <button id="btnReset" class="control-btn">↺ 重置</button>
+      <span class="step-info" id="stepInfo">步骤: 0 / 0</span>
+    </div>
+
+    <div class="visualizer-container heap-container">
+      <svg id="treeSvg" width="100%" height="350" viewBox="0 0 800 350"></svg>
+    </div>
+
+    <div class="heap-array-view">
+      <span class="array-label">数组表示:</span>
+      <div class="array-container" id="arrayContainer"></div>
+    </div>
+
+    <div class="visualizer-description" id="description" style="display:none"></div>
+
+    <div class="visualizer-info">
+      <span id="typeInfo"></span>
+      <span id="sizeInfo"></span>
+      <span id="topInfo"></span>
+    </div>
+  </div>
+
+  <script>
+    const args = PluginRuntime.getResolvedArgs ? PluginRuntime.getResolvedArgs() : {
+      type: 'max',
+      values: [50, 30, 70, 20, 40, 60, 80, 10, 25],
+      speed: 600,
+      ...(PluginRuntime.args || {})
+    };
+
+    const heapType = args.type || 'max';
+    const initialValues = Array.isArray(args.values) && args.values.length
+      ? args.values.slice()
+      : [50, 30, 70, 20, 40, 60, 80, 10, 25];
+    const insertValue = typeof args.insertValue === 'number' ? args.insertValue : undefined;
+    const speed = typeof args.speed === 'number' ? args.speed : 600;
+
+    // ============================================
+    // 堆操作算法 (生成器版本)
+    // ============================================
+
+    function compare(a, b, type) {
+      return type === 'max' ? a > b : a < b;
+    }
+
+    function* heapifyUp(heap, index, type) {
+      while (index > 0) {
+        const parent = Math.floor((index - 1) / 2);
+
+        yield {
+          heap: [...heap],
+          highlightIndices: [index, parent],
+          highlightType: 'comparing',
+          description: `比较节点 ${index} (${heap[index]}) 与父节点 ${parent} (${heap[parent]})`,
+        };
+
+        if (compare(heap[index], heap[parent], type)) {
+          yield {
+            heap: [...heap],
+            highlightIndices: [index, parent],
+            highlightType: 'swapping',
+            description: `交换 ${heap[index]} 和 ${heap[parent]}`,
+          };
+          [heap[index], heap[parent]] = [heap[parent], heap[index]];
+          index = parent;
+        } else {
+          break;
+        }
+      }
+    }
+
+    function* heapifyDown(heap, index, type) {
+      const n = heap.length;
+
+      while (true) {
+        let target = index;
+        const left = 2 * index + 1;
+        const right = 2 * index + 2;
+
+        if (left < n && compare(heap[left], heap[target], type)) {
+          target = left;
+        }
+
+        if (right < n && compare(heap[right], heap[target], type)) {
+          target = right;
+        }
+
+        if (target !== index) {
+          yield {
+            heap: [...heap],
+            highlightIndices: [index, target],
+            highlightType: 'comparing',
+            description: `比较并选择子节点 ${target}`,
+          };
+
+          yield {
+            heap: [...heap],
+            highlightIndices: [index, target],
+            highlightType: 'swapping',
+            description: `交换 ${heap[index]} 和 ${heap[target]}`,
+          };
+
+          [heap[index], heap[target]] = [heap[target], heap[index]];
+          index = target;
+        } else {
+          break;
+        }
+      }
+    }
+
+    function* insertHeap(heap, value, type) {
+      yield {
+        heap: [...heap],
+        highlightIndices: [],
+        highlightType: 'inserted',
+        description: `准备插入 ${value}`,
+      };
+
+      heap.push(value);
+      const insertIndex = heap.length - 1;
+
+      yield {
+        heap: [...heap],
+        highlightIndices: [insertIndex],
+        highlightType: 'inserted',
+        description: `添加 ${value} 到末尾`,
+      };
+
+      yield* heapifyUp(heap, insertIndex, type);
+
+      yield {
+        heap: [...heap],
+        highlightIndices: [],
+        highlightType: 'inserted',
+        description: `插入 ${value} 完成`,
+      };
+
+      return heap;
+    }
+
+    function* extractTop(heap, type) {
+      if (heap.length === 0) {
+        yield { heap: [], highlightIndices: [], highlightType: 'removed', description: '堆为空' };
+        return heap;
+      }
+
+      const top = heap[0];
+      yield {
+        heap: [...heap],
+        highlightIndices: [0],
+        highlightType: 'removed',
+        description: `准备移除堆顶元素 ${top}`,
+      };
+
+      const last = heap.pop();
+
+      if (heap.length > 0) {
+        heap[0] = last;
+        yield {
+          heap: [...heap],
+          highlightIndices: [0],
+          highlightType: 'swapping',
+          description: `将末尾元素 ${last} 移到堆顶`,
+        };
+
+        yield* heapifyDown(heap, 0, type);
+      }
+
+      yield {
+        heap: [...heap],
+        highlightIndices: [],
+        highlightType: 'removed',
+        description: `移除 ${top} 完成`,
+      };
+
+      return heap;
+    }
+
+    function* buildHeap(values, type) {
+      const heap = [...values];
+      const n = heap.length;
+
+      yield {
+        heap: [...heap],
+        highlightIndices: [],
+        highlightType: 'comparing',
+        description: '开始构建堆',
+      };
+
+      // 从最后一个非叶子节点开始
+      for (let i = Math.floor(n / 2) - 1; i >= 0; i--) {
+        yield {
+          heap: [...heap],
+          highlightIndices: [i],
+          highlightType: 'comparing',
+          description: `对节点 ${i} 进行堆化`,
+        };
+
+        yield* heapifyDown(heap, i, type);
+      }
+
+      yield {
+        heap: [...heap],
+        highlightIndices: [],
+        highlightType: 'inserted',
+        description: '堆构建完成',
+      };
+
+      return heap;
+    }
+
+    function collectSteps(generator) {
+      const steps = [];
+      let result = generator.next();
+      while (!result.done) {
+        steps.push(result.value);
+        result = generator.next();
+      }
+      return steps;
+    }
+
+    function randomInt(min = 1, max = 100) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    // ============================================
+    // 树布局计算
+    // ============================================
+
+    function calculateHeapLayout(heap, width = 800) {
+      if (heap.length === 0) return [];
+
+      const nodes = [];
+      const startY = 40;
+      const levelHeight = 70;
+
+      for (let i = 0; i < heap.length; i++) {
+        const level = Math.floor(Math.log2(i + 1));
+        const levelStart = Math.pow(2, level) - 1;
+        const posInLevel = i - levelStart;
+        const nodesInLevel = Math.pow(2, level);
+
+        const x = width / 2 + (posInLevel - (nodesInLevel - 1) / 2) * (width / nodesInLevel);
+        const y = startY + level * levelHeight;
+
+        nodes.push({ value: heap[i], index: i, x, y });
+      }
+
+      return nodes;
+    }
+
+    // ============================================
+    // 状态与渲染
+    // ============================================
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const svgEl = document.getElementById('treeSvg');
+    const arrayContainerEl = document.getElementById('arrayContainer');
+    const stepInfoEl = document.getElementById('stepInfo');
+    const descEl = document.getElementById('description');
+    const typeInfoEl = document.getElementById('typeInfo');
+    const sizeInfoEl = document.getElementById('sizeInfo');
+    const topInfoEl = document.getElementById('topInfo');
+    const btnInsert = document.getElementById('btnInsert');
+    const btnExtract = document.getElementById('btnExtract');
+    const btnPlay = document.getElementById('btnPlay');
+    const btnStep = document.getElementById('btnStep');
+    const btnReset = document.getElementById('btnReset');
+
+    let heap = [];
+    let highlightIndices = [];
+    let highlightType = 'comparing';
+    let description = '';
+    let isPlaying = false;
+    let currentStep = 0;
+    let totalSteps = 0;
+    let steps = [];
+    let timer = null;
+    const initialHeap = [...initialValues];
+
+    function getNodeColor(index) {
+      if (highlightIndices.includes(index)) {
+        switch (highlightType) {
+          case 'inserted': return '#22c55e';
+          case 'removed': return '#ef4444';
+          case 'swapping': return '#a855f7';
+          default: return '#eab308';
+        }
+      }
+      return 'var(--accent-color)';
+    }
+
+    function render() {
+      const nodes = calculateHeapLayout(heap);
+
+      // 边
+      svgEl.textContent = '';
+      for (let i = 0; i < heap.length; i++) {
+        const fromNode = nodes[i];
+        if (!fromNode) continue;
+        [2 * i + 1, 2 * i + 2].forEach((childIdx) => {
+          const toNode = nodes[childIdx];
+          if (!toNode) return;
+          const line = document.createElementNS(SVG_NS, 'line');
+          line.setAttribute('x1', fromNode.x);
+          line.setAttribute('y1', fromNode.y);
+          line.setAttribute('x2', toNode.x);
+          line.setAttribute('y2', toNode.y);
+          line.setAttribute('stroke', 'var(--border-color)');
+          line.setAttribute('stroke-width', '2');
+          svgEl.appendChild(line);
+        });
+      }
+
+      // 节点
+      nodes.forEach((node) => {
+        const highlighted = highlightIndices.includes(node.index);
+        const g = document.createElementNS(SVG_NS, 'g');
+
+        const circle = document.createElementNS(SVG_NS, 'circle');
+        circle.setAttribute('cx', node.x);
+        circle.setAttribute('cy', node.y);
+        circle.setAttribute('r', '24');
+        circle.setAttribute('fill', getNodeColor(node.index));
+        circle.setAttribute('stroke', highlighted ? 'var(--text-primary)' : 'var(--border-color)');
+        circle.setAttribute('stroke-width', highlighted ? '3' : '1');
+        circle.setAttribute('class', 'heap-node');
+        g.appendChild(circle);
+
+        const text = document.createElementNS(SVG_NS, 'text');
+        text.setAttribute('x', node.x);
+        text.setAttribute('y', node.y + 5);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('fill', 'var(--text-primary)');
+        text.setAttribute('font-size', '14');
+        text.setAttribute('font-weight', 'bold');
+        text.textContent = node.value;
+        g.appendChild(text);
+
+        svgEl.appendChild(g);
+      });
+
+      // 数组视图
+      arrayContainerEl.textContent = '';
+      heap.forEach((value, idx) => {
+        const highlighted = highlightIndices.includes(idx);
+        const item = document.createElement('div');
+        item.className = 'array-item' + (highlighted ? ' highlighted' : '');
+        item.style.backgroundColor = highlighted ? getNodeColor(idx) : 'var(--bg-secondary)';
+
+        const indexSpan = document.createElement('span');
+        indexSpan.className = 'array-index';
+        indexSpan.textContent = idx;
+
+        const valueSpan = document.createElement('span');
+        valueSpan.className = 'array-value';
+        valueSpan.textContent = value;
+
+        item.appendChild(indexSpan);
+        item.appendChild(valueSpan);
+        arrayContainerEl.appendChild(item);
+      });
+
+      // 步骤说明
+      stepInfoEl.textContent = `步骤: ${currentStep} / ${totalSteps}`;
+
+      if (description) {
+        descEl.style.display = '';
+        descEl.textContent = description;
+      } else {
+        descEl.style.display = 'none';
+      }
+
+      // 堆信息
+      typeInfoEl.textContent = `类型: ${heapType === 'max' ? '最大堆' : '最小堆'}`;
+      sizeInfoEl.textContent = `大小: ${heap.length}`;
+      topInfoEl.textContent = heap.length > 0 ? `堆顶: ${heap[0]}` : '';
+
+      updateControls();
+    }
+
+    function updateControls() {
+      btnInsert.disabled = isPlaying;
+      btnExtract.disabled = isPlaying || heap.length === 0;
+      btnPlay.disabled = totalSteps === 0;
+      btnPlay.textContent = isPlaying ? '⏸ 暂停' : '▶ 播放';
+      btnStep.disabled = isPlaying || currentStep >= totalSteps;
+    }
+
+    function notify(status) {
+      if (PluginRuntime.updateState) {
+        PluginRuntime.updateState({ status, currentStep, totalSteps });
+      }
+    }
+
+    function schedule() {
+      if (!isPlaying || currentStep >= totalSteps) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(step, speed);
+    }
+
+    function step() {
+      if (currentStep >= totalSteps) return;
+      const stepData = steps[currentStep];
+      heap = stepData.heap.slice();
+      highlightIndices = stepData.highlightIndices;
+      highlightType = stepData.highlightType;
+      description = stepData.description;
+      currentStep++;
+      render();
+
+      if (currentStep >= totalSteps) {
+        isPlaying = false;
+        if (timer) { clearTimeout(timer); timer = null; }
+        notify('completed');
+      } else {
+        notify(isPlaying ? 'playing' : 'paused');
+        schedule();
+      }
+    }
+
+    function play() {
+      if (currentStep < totalSteps) {
+        isPlaying = true;
+        notify('playing');
+        render();
+        schedule();
+      }
+    }
+
+    function pause() {
+      isPlaying = false;
+      if (timer) { clearTimeout(timer); timer = null; }
+      notify('paused');
+      render();
+    }
+
+    function reset() {
+      isPlaying = false;
+      if (timer) { clearTimeout(timer); timer = null; }
+      heap = [...initialHeap];
+      highlightIndices = [];
+      description = '';
+      currentStep = 0;
+      totalSteps = 0;
+      render();
+      notify('idle');
+
+      // 重新构建堆
+      steps = collectSteps(buildHeap([...initialHeap], heapType));
+      totalSteps = steps.length;
+      render();
+    }
+
+    function loadSteps(generator) {
+      steps = collectSteps(generator);
+      totalSteps = steps.length;
+      currentStep = 0;
+      isPlaying = true;
+      notify('playing');
+      render();
+      schedule();
+    }
+
+    btnInsert.addEventListener('click', () => {
+      if (isPlaying) return;
+      const value = insertValue !== undefined ? insertValue : randomInt();
+      loadSteps(insertHeap([...heap], value, heapType));
+    });
+
+    btnExtract.addEventListener('click', () => {
+      if (isPlaying || heap.length === 0) return;
+      loadSteps(extractTop([...heap], heapType));
+    });
+
+    btnPlay.addEventListener('click', () => {
+      if (isPlaying) pause();
+      else play();
+    });
+
+    btnStep.addEventListener('click', () => {
+      if (isPlaying) return;
+      step();
+    });
+
+    btnReset.addEventListener('click', reset);
+
+    // 参数变化时宿主会重新注入 iframe，无需额外处理
+    window.onArgsUpdate = function () {};
+
+    // 初始化：生成构建堆的步骤并自动播放
+    heap = [];
+    highlightIndices = [];
+    description = '';
+    currentStep = 0;
+    render();
+
+    steps = collectSteps(buildHeap([...initialValues], heapType));
+    totalSteps = steps.length;
+    isPlaying = true;
+    render();
+    notify('playing');
+    schedule();
+  </script>
+</body>
+</html>

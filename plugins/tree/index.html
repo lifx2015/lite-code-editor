@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>树结构可视化</title>
+  <style>
+    :root { --bg-primary:#ffffff; --bg-secondary:#f7f8fa; --bg-tertiary:#eef0f4; --border-color:#e8eaed; --border-color-strong:#d1d5db; --text-primary:#111827; --text-secondary:#6b7280; --accent-color:#2563eb; --accent-hover:#1d4ed8; --bg-input:#f5f6f8; --success-color:#10b981; }
+    [data-theme="dark"] { --bg-primary:#1a1a1f; --bg-secondary:#141418; --bg-tertiary:#22222a; --border-color:#2e2e38; --border-color-strong:#3e3e4a; --text-primary:#e8e8ed; --text-secondary:#9a9aaa; --accent-color:#4a9eff; --accent-hover:#3b8bdb; --bg-input:#2a2a32; --success-color:#34d399; }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 8px;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    .tree-visualizer {
+      padding: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin: 0;
+    }
+
+    .visualizer-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .control-btn {
+      padding: 6px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .control-btn:hover {
+      background: var(--bg-tertiary);
+      border-color: var(--accent-color);
+    }
+
+    .control-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .step-info {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: SFMono-Regular, Consolas, monospace;
+    }
+
+    .visualizer-container {
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+    }
+
+    .tree-container {
+      height: 400px;
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      overflow: auto;
+    }
+
+    .tree-node {
+      transition: fill 0.2s, stroke 0.2s;
+    }
+
+    .visualizer-description {
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .visualizer-info {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="tree-visualizer">
+    <div class="visualizer-controls">
+      <button id="btnInsert" class="control-btn">➕ 插入</button>
+      <button id="btnSearch" class="control-btn">🔍 搜索</button>
+      <button id="btnPlay" class="control-btn">▶ 播放</button>
+      <button id="btnStep" class="control-btn">⏭ 单步</button>
+      <button id="btnReset" class="control-btn">↺ 重置</button>
+      <span class="step-info" id="stepInfo">步骤: 0 / 0</span>
+    </div>
+
+    <div class="visualizer-container tree-container">
+      <svg id="treeSvg" width="100%" height="400" viewBox="0 0 800 400"></svg>
+    </div>
+
+    <div class="visualizer-description" id="description" style="display:none"></div>
+
+    <div class="visualizer-info">
+      <span id="typeInfo"></span>
+      <span id="nodeInfo"></span>
+      <span id="heightInfo"></span>
+    </div>
+  </div>
+
+  <script>
+    const DEFAULTS = {
+      type: 'bst',
+      values: [50, 30, 70, 20, 40, 60, 80],
+      speed: 800,
+    };
+
+    const args = PluginRuntime.getResolvedArgs
+      ? PluginRuntime.getResolvedArgs()
+      : { ...DEFAULTS, ...(PluginRuntime.args || {}) };
+
+    const type = args.type || 'bst';
+    const values = Array.isArray(args.values) ? args.values.slice() : [50, 30, 70, 20, 40, 60, 80];
+    const insertValue = typeof args.insertValue === 'number' ? args.insertValue : undefined;
+    const searchValue = typeof args.searchValue === 'number' ? args.searchValue : undefined;
+    const speed = typeof args.speed === 'number' ? args.speed : 800;
+
+    // ============================================
+    // 树操作算法 (生成器版本)
+    // ============================================
+
+    function getHeight(node) {
+      if (!node) return 0;
+      return Math.max(getHeight(node.left), getHeight(node.right)) + 1;
+    }
+
+    function cloneTree(node) {
+      if (!node) return null;
+      const cloned = {
+        id: node.id,
+        value: node.value,
+        height: node.height,
+        color: node.color,
+      };
+      cloned.left = cloneTree(node.left) || undefined;
+      cloned.right = cloneTree(node.right) || undefined;
+      return cloned;
+    }
+
+    let nodeIdCounter = 0;
+    function generateNodeId() {
+      return `node_${nodeIdCounter++}`;
+    }
+    function resetNodeId() {
+      nodeIdCounter = 0;
+    }
+
+    function createNode(value, color) {
+      return {
+        id: generateNodeId(),
+        value,
+        height: 1,
+        color: color || undefined,
+      };
+    }
+
+    function randomInt(min = 1, max = 100) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    // 从数组创建完全二叉树
+    function createBinaryTree(list) {
+      if (list.length === 0) return null;
+      resetNodeId();
+
+      const nodes = list.map(v => createNode(v));
+
+      for (let i = 0; i < nodes.length; i++) {
+        const leftIdx = 2 * i + 1;
+        const rightIdx = 2 * i + 2;
+        if (nodes[i]) {
+          nodes[i].left = nodes[leftIdx] || undefined;
+          nodes[i].right = nodes[rightIdx] || undefined;
+        }
+      }
+
+      return nodes[0];
+    }
+
+    // BST 插入
+    function* bstInsert(root, value) {
+      resetNodeId();
+
+      function* insert(node, val) {
+        if (!node) {
+          const newNode = createNode(val);
+          yield { tree: cloneTree(root), description: `创建新节点 ${val}`, highlightNodes: [newNode.id], highlightType: 'current' };
+          return newNode;
+        }
+
+        yield { tree: cloneTree(root), description: `比较 ${val} 与 ${node.value}`, highlightNodes: [node.id], highlightType: 'comparing' };
+
+        if (val < node.value) {
+          const newLeft = yield* insert(node.left || null, val);
+          node.left = newLeft;
+        } else if (val > node.value) {
+          const newRight = yield* insert(node.right || null, val);
+          node.right = newRight;
+        } else {
+          yield { tree: cloneTree(root), description: `值 ${val} 已存在`, highlightNodes: [node.id], highlightType: 'found' };
+          return node;
+        }
+
+        return node;
+      }
+
+      const result = yield* insert(root, value);
+      yield { tree: cloneTree(result), description: `插入 ${value} 完成` };
+      return result;
+    }
+
+    // BST 搜索
+    function* bstSearch(root, value) {
+      if (!root) {
+        yield { tree: null, description: '树为空' };
+        return;
+      }
+
+      let current = root;
+      while (current) {
+        yield { tree: cloneTree(root), description: `比较 ${value} 与 ${current.value}`, highlightNodes: [current.id], highlightType: 'comparing' };
+
+        if (value === current.value) {
+          yield { tree: cloneTree(root), description: `找到值 ${value}`, highlightNodes: [current.id], highlightType: 'found' };
+          return;
+        } else if (value < current.value) {
+          current = current.left || null;
+        } else {
+          current = current.right || null;
+        }
+      }
+
+      yield { tree: cloneTree(root), description: `未找到值 ${value}` };
+    }
+
+    // AVL 树旋转
+    function updateHeight(node) {
+      node.height = Math.max(getHeight(node.left), getHeight(node.right)) + 1;
+    }
+
+    function getBalance(node) {
+      return getHeight(node.left) - getHeight(node.right);
+    }
+
+    function rotateRight(y) {
+      const x = y.left;
+      const T2 = x.right;
+
+      x.right = y;
+      y.left = T2;
+
+      updateHeight(y);
+      updateHeight(x);
+
+      return x;
+    }
+
+    function rotateLeft(x) {
+      const y = x.right;
+      const T2 = y.left;
+
+      y.left = x;
+      x.right = T2;
+
+      updateHeight(x);
+      updateHeight(y);
+
+      return y;
+    }
+
+    // AVL 插入
+    function* avlInsert(root, value) {
+      resetNodeId();
+
+      function* insert(node, val) {
+        if (!node) {
+          const newNode = createNode(val);
+          yield { tree: cloneTree(root), description: `创建新节点 ${val}`, highlightNodes: [newNode.id], highlightType: 'current' };
+          return newNode;
+        }
+
+        yield { tree: cloneTree(root), description: `比较 ${val} 与 ${node.value}`, highlightNodes: [node.id], highlightType: 'comparing' };
+
+        if (val < node.value) {
+          node.left = yield* insert(node.left || null, val);
+        } else if (val > node.value) {
+          node.right = yield* insert(node.right || null, val);
+        } else {
+          return node;
+        }
+
+        updateHeight(node);
+        const balance = getBalance(node);
+
+        // 左左情况
+        if (balance > 1 && val < (node.left ? node.left.value : 0)) {
+          yield { tree: cloneTree(root), description: `左左失衡，右旋`, highlightNodes: [node.id], highlightType: 'rotating' };
+          return rotateRight(node);
+        }
+
+        // 右右情况
+        if (balance < -1 && val > (node.right ? node.right.value : 0)) {
+          yield { tree: cloneTree(root), description: `右右失衡，左旋`, highlightNodes: [node.id], highlightType: 'rotating' };
+          return rotateLeft(node);
+        }
+
+        // 左右情况
+        if (balance > 1 && val > (node.left ? node.left.value : 0)) {
+          yield { tree: cloneTree(root), description: `左右失衡，先左旋后右旋`, highlightNodes: [node.id], highlightType: 'rotating' };
+          node.left = rotateLeft(node.left);
+          return rotateRight(node);
+        }
+
+        // 右左情况
+        if (balance < -1 && val < (node.right ? node.right.value : 0)) {
+          yield { tree: cloneTree(root), description: `右左失衡，先右旋后左旋`, highlightNodes: [node.id], highlightType: 'rotating' };
+          node.right = rotateRight(node.right);
+          return rotateLeft(node);
+        }
+
+        return node;
+      }
+
+      const result = yield* insert(root, value);
+      yield { tree: cloneTree(result), description: `AVL 插入 ${value} 完成` };
+      return result;
+    }
+
+    // 红黑树插入
+    function* redblackInsert(root, value) {
+      resetNodeId();
+
+      function createRedNode(val) {
+        return createNode(val, 'red');
+      }
+
+      function* insert(node, val) {
+        if (!node) {
+          const newNode = createRedNode(val);
+          yield { tree: cloneTree(root), description: `创建红色节点 ${val}`, highlightNodes: [newNode.id], highlightType: 'current' };
+          return newNode;
+        }
+
+        yield { tree: cloneTree(root), description: `比较 ${val} 与 ${node.value}`, highlightNodes: [node.id], highlightType: 'comparing' };
+
+        if (val < node.value) {
+          node.left = yield* insert(node.left || null, val);
+        } else if (val > node.value) {
+          node.right = yield* insert(node.right || null, val);
+        } else {
+          return node;
+        }
+
+        return node;
+      }
+
+      let result = yield* insert(root, value);
+      if (result) {
+        result.color = 'black';
+        yield { tree: cloneTree(result), description: `根节点染黑`, highlightNodes: [result.id], highlightType: 'current' };
+      }
+
+      yield { tree: cloneTree(result), description: `红黑树插入 ${value} 完成` };
+      return result;
+    }
+
+    // ============================================
+    // 树布局计算
+    // ============================================
+
+    function calculateLayout(node, x, y, level, spacing) {
+      if (!node) return;
+      x = x === undefined ? 400 : x;
+      y = y === undefined ? 40 : y;
+      level = level === undefined ? 0 : level;
+      spacing = spacing === undefined ? 200 : spacing;
+
+      node.x = x;
+      node.y = y;
+
+      const nextSpacing = spacing * 0.55;
+
+      if (node.left) {
+        calculateLayout(node.left, x - spacing, y + 70, level + 1, nextSpacing);
+      }
+      if (node.right) {
+        calculateLayout(node.right, x + spacing, y + 70, level + 1, nextSpacing);
+      }
+    }
+
+    function collectNodes(node, nodes) {
+      nodes = nodes || [];
+      if (!node) return nodes;
+      nodes.push(node);
+      if (node.left) collectNodes(node.left, nodes);
+      if (node.right) collectNodes(node.right, nodes);
+      return nodes;
+    }
+
+    function collectEdges(node, edges) {
+      edges = edges || [];
+      if (!node) return edges;
+      if (node.left) {
+        edges.push({ from: node, to: node.left });
+        collectEdges(node.left, edges);
+      }
+      if (node.right) {
+        edges.push({ from: node, to: node.right });
+        collectEdges(node.right, edges);
+      }
+      return edges;
+    }
+
+    function collectSteps(generator) {
+      const steps = [];
+      let result = generator.next();
+      while (!result.done) {
+        steps.push(result.value);
+        result = generator.next();
+      }
+      return steps;
+    }
+
+    // ============================================
+    // 状态与渲染
+    // ============================================
+
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const svgEl = document.getElementById('treeSvg');
+    const stepInfoEl = document.getElementById('stepInfo');
+    const descEl = document.getElementById('description');
+    const typeInfoEl = document.getElementById('typeInfo');
+    const nodeInfoEl = document.getElementById('nodeInfo');
+    const heightInfoEl = document.getElementById('heightInfo');
+    const btnInsert = document.getElementById('btnInsert');
+    const btnSearch = document.getElementById('btnSearch');
+    const btnPlay = document.getElementById('btnPlay');
+    const btnStep = document.getElementById('btnStep');
+    const btnReset = document.getElementById('btnReset');
+
+    const treeTypeName = {
+      binary: '二叉树',
+      bst: '二叉搜索树',
+      avl: 'AVL树',
+      redblack: '红黑树',
+    };
+
+    let currentTree = null;
+    let initialTree = null;
+    let highlightNodes = new Set();
+    let highlightType = 'current';
+    let description = '';
+    let isPlaying = false;
+    let currentStep = 0;
+    let totalSteps = 0;
+    let steps = [];
+    let timer = null;
+
+    function getNodeColor(node) {
+      const highlighted = highlightNodes.has(node.id);
+      if (highlighted) {
+        switch (highlightType) {
+          case 'found': return '#22c55e';
+          case 'comparing': return '#eab308';
+          case 'rotating': return '#a855f7';
+          default: return '#3b82f6';
+        }
+      }
+      if (node.color === 'red') return '#ef4444';
+      if (node.color === 'black') return '#1f2937';
+      return 'var(--accent-color)';
+    }
+
+    function render() {
+      const layoutTree = currentTree ? cloneTree(currentTree) : null;
+      if (layoutTree) calculateLayout(layoutTree);
+
+      const nodes = layoutTree ? collectNodes(layoutTree) : [];
+      const edges = layoutTree ? collectEdges(layoutTree) : [];
+
+      svgEl.innerHTML = '';
+
+      edges.forEach(edge => {
+        const line = document.createElementNS(SVG_NS, 'line');
+        line.setAttribute('x1', edge.from.x);
+        line.setAttribute('y1', edge.from.y);
+        line.setAttribute('x2', edge.to.x);
+        line.setAttribute('y2', edge.to.y);
+        line.setAttribute('stroke', 'var(--border-color)');
+        line.setAttribute('stroke-width', '2');
+        svgEl.appendChild(line);
+      });
+
+      nodes.forEach(node => {
+        const group = document.createElementNS(SVG_NS, 'g');
+        const highlighted = highlightNodes.has(node.id);
+
+        const circle = document.createElementNS(SVG_NS, 'circle');
+        circle.setAttribute('cx', node.x === undefined ? 0 : node.x);
+        circle.setAttribute('cy', node.y === undefined ? 0 : node.y);
+        circle.setAttribute('r', '24');
+        circle.setAttribute('fill', getNodeColor(node));
+        circle.setAttribute('stroke', highlighted ? 'var(--text-primary)' : 'var(--border-color)');
+        circle.setAttribute('stroke-width', highlighted ? '3' : '1');
+        circle.setAttribute('class', 'tree-node');
+        group.appendChild(circle);
+
+        const text = document.createElementNS(SVG_NS, 'text');
+        text.setAttribute('x', node.x === undefined ? 0 : node.x);
+        text.setAttribute('y', (node.y === undefined ? 0 : node.y) + 5);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('fill', node.color === 'black' ? 'white' : 'var(--text-primary)');
+        text.setAttribute('font-size', '14');
+        text.setAttribute('font-weight', 'bold');
+        text.textContent = node.value;
+        group.appendChild(text);
+
+        svgEl.appendChild(group);
+      });
+
+      stepInfoEl.textContent = `步骤: ${currentStep} / ${totalSteps}`;
+      btnPlay.textContent = isPlaying ? '⏸ 暂停' : '▶ 播放';
+      btnInsert.disabled = isPlaying;
+      btnSearch.disabled = isPlaying;
+      btnPlay.disabled = totalSteps === 0;
+      btnStep.disabled = isPlaying || currentStep >= totalSteps;
+
+      if (description) {
+        descEl.style.display = '';
+        descEl.textContent = description;
+      } else {
+        descEl.style.display = 'none';
+      }
+
+      typeInfoEl.textContent = `类型: ${treeTypeName[type] || treeTypeName.bst}`;
+      nodeInfoEl.textContent = `节点数: ${nodes.length}`;
+      heightInfoEl.textContent = `高度: ${getHeight(layoutTree)}`;
+    }
+
+    function notify(status) {
+      if (PluginRuntime.updateState) {
+        PluginRuntime.updateState({ status, currentStep, totalSteps });
+      }
+    }
+
+    // 初始化树
+    function initTree() {
+      resetNodeId();
+      const tree = createBinaryTree(values);
+      initialTree = cloneTree(tree);
+      currentTree = tree;
+      steps = [];
+      currentStep = 0;
+      totalSteps = 0;
+      highlightNodes = new Set();
+      highlightType = 'current';
+      description = '';
+      stopPlay();
+      render();
+      notify('idle');
+    }
+
+    // 生成操作步骤
+    function generateSteps(operation, value) {
+      resetNodeId();
+      let generator;
+
+      const treeCopy = cloneTree(currentTree);
+
+      if (operation === 'insert') {
+        switch (type) {
+          case 'avl':
+            generator = avlInsert(treeCopy, value);
+            break;
+          case 'redblack':
+            generator = redblackInsert(treeCopy, value);
+            break;
+          case 'bst':
+          case 'binary':
+          default:
+            generator = bstInsert(treeCopy, value);
+        }
+      } else {
+        generator = bstSearch(treeCopy, value);
+      }
+
+      return collectSteps(generator);
+    }
+
+    function handleInsert() {
+      if (isPlaying) return;
+      const value = insertValue !== undefined ? insertValue : randomInt();
+      steps = generateSteps('insert', value);
+      totalSteps = steps.length;
+      currentStep = 0;
+      startPlay();
+    }
+
+    function handleSearch() {
+      if (isPlaying) return;
+      const value = searchValue !== undefined
+        ? searchValue
+        : values[Math.floor(Math.random() * values.length)];
+      steps = generateSteps('search', value);
+      totalSteps = steps.length;
+      currentStep = 0;
+      startPlay();
+    }
+
+    function step() {
+      if (currentStep >= totalSteps) return;
+      const stepData = steps[currentStep];
+      if (stepData.tree) {
+        calculateLayout(stepData.tree);
+      }
+      currentTree = stepData.tree;
+      highlightNodes = new Set(stepData.highlightNodes || []);
+      highlightType = stepData.highlightType || 'current';
+      description = stepData.description;
+      currentStep++;
+
+      render();
+
+      if (currentStep >= totalSteps) {
+        stopPlay();
+        notify('completed');
+      } else {
+        notify(isPlaying ? 'playing' : 'paused');
+      }
+    }
+
+    function loop() {
+      if (!isPlaying) return;
+      timer = setTimeout(() => {
+        if (!isPlaying) return;
+        step();
+        if (isPlaying && currentStep < totalSteps) loop();
+      }, speed);
+    }
+
+    function startPlay() {
+      if (isPlaying) return;
+      isPlaying = true;
+      render();
+      loop();
+      notify('playing');
+    }
+
+    function stopPlay() {
+      isPlaying = false;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    }
+
+    function togglePlay() {
+      if (isPlaying) {
+        stopPlay();
+        render();
+        notify('paused');
+      } else if (currentStep < totalSteps) {
+        startPlay();
+      }
+    }
+
+    function reset() {
+      stopPlay();
+      currentTree = cloneTree(initialTree);
+      highlightNodes = new Set();
+      description = '';
+      currentStep = 0;
+      render();
+      notify('idle');
+    }
+
+    btnInsert.addEventListener('click', handleInsert);
+    btnSearch.addEventListener('click', handleSearch);
+    btnPlay.addEventListener('click', togglePlay);
+    btnStep.addEventListener('click', () => {
+      if (isPlaying) return;
+      step();
+    });
+    btnReset.addEventListener('click', reset);
+
+    // 参数变化时宿主会重新注入 iframe，无需额外处理
+    window.onArgsUpdate = function () {};
+
+    initTree();
+  </script>
+</body>
+</html>

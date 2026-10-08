@@ -155,12 +155,10 @@ lite-code-editor/
 │   ├── core/types/               # Type definitions
 │   │   └── directive.ts          # Directive types
 │   ├── plugins/                  # Plugin system
-│   │   ├── remark-directive-custom.ts  # Directive parser plugin
 │   │   └── component-registry.ts       # Component registry
 │   ├── components/               # UI components
 │   │   ├── PreviewEngine/        # Dual-mode preview engine
-│   │   ├── ExternalPluginLoader/ # External plugin loader
-│   │   └── PluginSandbox/        # Plugin sandbox
+│   │   └── ExternalPluginLoader/ # External plugin loader
 │   └── visualizers/              # Visualization components
 │       └── algorithms/           # Algorithm visualizers
 │           └── SortVisualizer.tsx

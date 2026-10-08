@@ -1,0 +1,62 @@
+{
+  "meta": {
+    "id": "linkedlist",
+    "name": "链表可视化",
+    "version": "1.0.0",
+    "author": "EditLite Team",
+    "description": "以动画方式展示单链表、双链表与环形链表的遍历、搜索、头插、尾插与删除操作。",
+    "directives": [
+      {
+        "name": "linkedlist",
+        "description": "链表可视化",
+        "params": [
+          {
+            "name": "type",
+            "type": "string",
+            "required": false,
+            "default": "singly",
+            "description": "链表类型: singly / doubly / circular"
+          },
+          {
+            "name": "values",
+            "type": "number[]",
+            "required": false,
+            "default": [10, 20, 30, 40, 50],
+            "description": "初始节点值"
+          },
+          {
+            "name": "insertValue",
+            "type": "number",
+            "required": false,
+            "description": "点击“头插/尾插”时插入的值（缺省随机）"
+          },
+          {
+            "name": "searchValue",
+            "type": "number",
+            "required": false,
+            "description": "点击“搜索”时查找的值（缺省首个节点值）"
+          },
+          {
+            "name": "deleteValue",
+            "type": "number",
+            "required": false,
+            "description": "点击“删除”时删除的值（缺省首个节点值）"
+          },
+          {
+            "name": "speed",
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "动画速度（毫秒）"
+          }
+        ],
+        "examples": [
+          ":linkedlist{}",
+          ":linkedlist{type=\"doubly\"}",
+          ":linkedlist{type=\"circular\" values=[1,2,3,4,5]}"
+        ]
+      }
+    ]
+  },
+  "main": "index.html"
+}

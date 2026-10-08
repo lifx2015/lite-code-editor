@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>栈/队列可视化</title>
+  <style>
+    :root {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f7f8fa;
+      --bg-tertiary: #eef0f4;
+      --border-color: #e8eaed;
+      --border-color-strong: #d1d5db;
+      --text-primary: #111827;
+      --text-secondary: #6b7280;
+      --accent-color: #2563eb;
+      --accent-hover: #1d4ed8;
+      --bg-input: #f5f6f8;
+      --success-color: #10b981;
+    }
+
+    [data-theme="dark"] {
+      --bg-primary: #1a1a1f;
+      --bg-secondary: #141418;
+      --bg-tertiary: #22222a;
+      --border-color: #2e2e38;
+      --border-color-strong: #3e3e4a;
+      --text-primary: #e8e8ed;
+      --text-secondary: #9a9aaa;
+      --accent-color: #4a9eff;
+      --accent-hover: #3b8bdb;
+      --bg-input: #2a2a32;
+      --success-color: #34d399;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 8px;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    .stack-queue-visualizer {
+      padding: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin: 12px 0;
+    }
+
+    .visualizer-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .control-btn {
+      padding: 6px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .control-btn:hover {
+      background: var(--bg-tertiary);
+      border-color: var(--accent-color);
+    }
+
+    .control-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .step-info {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: SFMono-Regular, Consolas, monospace;
+    }
+
+    .ds-container {
+      min-height: 300px;
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+    }
+
+    .ds-body {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .direction-indicators {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .indicator {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-secondary);
+      gap: 2px;
+    }
+
+    .indicator span:first-child {
+      font-size: 14px;
+    }
+
+    .elements-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 12px;
+      background: var(--bg-primary);
+      border-radius: 6px;
+      min-height: 200px;
+    }
+
+    .elements-container.queue {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .empty-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      min-height: 150px;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+
+    .ds-element {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-width: 60px;
+      height: 50px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      transition: all 0.2s;
+    }
+
+    .ds-element.highlighted {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 8px rgba(37, 99, 235, 0.3);
+    }
+
+    .ds-element.front,
+    .ds-element.top {
+      border-width: 2px;
+    }
+
+    .element-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .element-label {
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .ds-info-panel {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: var(--bg-primary);
+      border-radius: 6px;
+    }
+
+    .info-item {
+      display: flex;
+      gap: 4px;
+      font-size: 12px;
+    }
+
+    .info-label {
+      color: var(--text-secondary);
+    }
+
+    .info-value {
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .visualizer-description {
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .visualizer-info {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="stack-queue-visualizer">
+    <!-- 控制栏 -->
+    <div class="visualizer-controls">
+      <button id="btnPush" class="control-btn">➕ 压入 (Push)</button>
+      <button id="btnPop" class="control-btn">➖ 弹出 (Pop)</button>
+      <button id="btnPeek" class="control-btn">👁 查看栈顶</button>
+      <button id="btnPlay" class="control-btn">▶ 播放</button>
+      <button id="btnStep" class="control-btn">⏭ 单步</button>
+      <button id="btnReset" class="control-btn">↺ 重置</button>
+      <span class="step-info" id="stepInfo">步骤: 0 / 0</span>
+    </div>
+
+    <!-- 可视化区域 -->
+    <div class="ds-container">
+      <div class="ds-body" id="dsBody">
+        <!-- 方向指示 -->
+        <div class="direction-indicators" id="directionIndicators"></div>
+        <!-- 元素容器 -->
+        <div class="elements-container" id="elementsContainer"></div>
+      </div>
+
+      <!-- 操作说明 -->
+      <div class="ds-info-panel" id="infoPanel"></div>
+    </div>
+
+    <!-- 描述 -->
+    <div class="visualizer-description" id="description" style="display:none"></div>
+
+    <!-- 复杂度信息 -->
+    <div class="visualizer-info">
+      <span>时间复杂度: Push/Pop O(1)</span>
+      <span>空间复杂度: O(n)</span>
+    </div>
+  </div>
+
+  <script>
+    // ============================================
+    // 运行时与参数
+    // ============================================
+
+    const rt = window.PluginRuntime || {};
+
+    // mode 由指令名推导（原组件从 registry 默认参数注入 mode）
+    const mode = rt.directiveName === 'queue' ? 'queue' : 'stack';
+
+    const args = rt.getResolvedArgs ? rt.getResolvedArgs() : {
+      values: [10, 20, 30, 40, 50],
+      speed: 500,
+      ...(rt.args || {})
+    };
+
+    const initialValues = Array.isArray(args.values) ? args.values.slice() : [10, 20, 30, 40, 50];
+    const pushValue = typeof args.pushValue === 'number' ? args.pushValue : undefined;
+    const speed = typeof args.speed === 'number' ? args.speed : 500;
+
+    function randomInt(min = 1, max = 100) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    // ============================================
+    // 操作生成器
+    // ============================================
+
+    function* pushOperation(data, value, mode) {
+      yield {
+        data: [...data],
+        highlightIndices: [],
+        highlightType: 'push',
+        operation: 'push',
+        description: `准备${mode === 'stack' ? '压入' : '入队'} ${value}`,
+      };
+
+      const newData = [...data, value];
+
+      yield {
+        data: newData,
+        highlightIndices: [newData.length - 1],
+        highlightType: 'push',
+        operation: 'push',
+        description: `${mode === 'stack' ? '压入' : '入队'} ${value}`,
+      };
+
+      return newData;
+    }
+
+    function* popOperation(data, mode) {
+      if (data.length === 0) {
+        yield {
+          data: [],
+          highlightIndices: [],
+          highlightType: 'pop',
+          operation: 'pop',
+          description: `${mode === 'stack' ? '栈' : '队列'}为空`,
+        };
+        return data;
+      }
+
+      const popIndex = mode === 'stack' ? data.length - 1 : 0;
+      const popValue = data[popIndex];
+
+      yield {
+        data: [...data],
+        highlightIndices: [popIndex],
+        highlightType: 'pop',
+        operation: 'pop',
+        description: `准备${mode === 'stack' ? '弹出' : '出队'} ${popValue}`,
+      };
+
+      const newData = mode === 'stack' ? data.slice(0, -1) : data.slice(1);
+
+      yield {
+        data: newData,
+        highlightIndices: [],
+        highlightType: 'pop',
+        operation: 'pop',
+        description: `${mode === 'stack' ? '弹出' : '出队'} ${popValue}`,
+      };
+
+      return newData;
+    }
+
+    function* peekOperation(data, mode) {
+      if (data.length === 0) {
+        yield {
+          data: [],
+          highlightIndices: [],
+          highlightType: 'peek',
+          operation: 'peek',
+          description: `${mode === 'stack' ? '栈' : '队列'}为空`,
+        };
+        return;
+      }
+
+      const peekIndex = mode === 'stack' ? data.length - 1 : 0;
+
+      yield {
+        data: [...data],
+        highlightIndices: [peekIndex],
+        highlightType: 'peek',
+        operation: 'peek',
+        description: `查看${mode === 'stack' ? '栈顶' : '队头'}元素: ${data[peekIndex]}`,
+      };
+    }
+
+    function collectSteps(gen) {
+      const steps = [];
+      let result = gen.next();
+      while (!result.done) {
+        steps.push(result.value);
+        result = gen.next();
+      }
+      return steps;
+    }
+
+    // ============================================
+    // 状态与渲染
+    // ============================================
+
+    const elementsContainer = document.getElementById('elementsContainer');
+    const directionIndicators = document.getElementById('directionIndicators');
+    const infoPanel = document.getElementById('infoPanel');
+    const descEl = document.getElementById('description');
+    const stepInfoEl = document.getElementById('stepInfo');
+    const btnPush = document.getElementById('btnPush');
+    const btnPop = document.getElementById('btnPop');
+    const btnPeek = document.getElementById('btnPeek');
+    const btnPlay = document.getElementById('btnPlay');
+    const btnStep = document.getElementById('btnStep');
+    const btnReset = document.getElementById('btnReset');
+
+    const modeName = mode === 'stack' ? '栈' : '队列';
+    const pushName = mode === 'stack' ? '压入 (Push)' : '入队 (Enqueue)';
+    const popName = mode === 'stack' ? '弹出 (Pop)' : '出队 (Dequeue)';
+    const peekName = mode === 'stack' ? '栈顶' : '队头';
+
+    let baseData = initialValues.slice();
+    let data = initialValues.slice();
+    let highlightIndices = [];
+    let highlightType = 'push';
+    let description = '';
+
+    let isPlaying = false;
+    let currentStep = 0;
+    let totalSteps = 0;
+    let steps = [];
+    let animationRef = null;
+
+    function getItemColor(index) {
+      if (highlightIndices.includes(index)) {
+        switch (highlightType) {
+          case 'push': return '#22c55e';
+          case 'pop': return '#ef4444';
+          case 'peek': return '#3b82f6';
+        }
+      }
+      return 'transparent';
+    }
+
+    function render() {
+      elementsContainer.className = `elements-container ${mode}`;
+      elementsContainer.innerHTML = '';
+
+      if (data.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = `${modeName}为空`;
+        elementsContainer.appendChild(empty);
+      } else {
+        data.forEach((value, idx) => {
+          const highlighted = highlightIndices.includes(idx);
+          const el = document.createElement('div');
+          const classes = ['ds-element'];
+          if (highlighted) classes.push('highlighted');
+          if (mode === 'queue' && idx === 0) classes.push('front');
+          if (mode === 'stack' && idx === data.length - 1) classes.push('top');
+          el.className = classes.join(' ');
+          el.style.backgroundColor = getItemColor(idx);
+          el.style.transform = highlighted ? 'scale(1.05)' : 'scale(1)';
+
+          const valueSpan = document.createElement('span');
+          valueSpan.className = 'element-value';
+          valueSpan.textContent = value;
+          el.appendChild(valueSpan);
+
+          if (mode === 'stack' && idx === data.length - 1) {
+            const label = document.createElement('span');
+            label.className = 'element-label';
+            label.textContent = 'Top';
+            el.appendChild(label);
+          }
+          if (mode === 'queue' && idx === 0) {
+            const label = document.createElement('span');
+            label.className = 'element-label';
+            label.textContent = 'Front';
+            el.appendChild(label);
+          }
+
+          elementsContainer.appendChild(el);
+        });
+      }
+
+      // 信息面板
+      infoPanel.innerHTML = '';
+      const items = [
+        { label: '类型:', value: `${modeName} (${mode === 'stack' ? 'LIFO' : 'FIFO'})` },
+        { label: '大小:', value: String(data.length) },
+      ];
+      if (data.length > 0) {
+        items.push({
+          label: `${mode === 'stack' ? '栈顶' : '队头'}:`,
+          value: String(mode === 'stack' ? data[data.length - 1] : data[0]),
+        });
+      }
+      items.forEach(({ label, value }) => {
+        const item = document.createElement('div');
+        item.className = 'info-item';
+        const labelEl = document.createElement('span');
+        labelEl.className = 'info-label';
+        labelEl.textContent = label;
+        const valueEl = document.createElement('span');
+        valueEl.className = 'info-value';
+        valueEl.textContent = value;
+        item.appendChild(labelEl);
+        item.appendChild(valueEl);
+        infoPanel.appendChild(item);
+      });
+
+      // 描述
+      if (description) {
+        descEl.style.display = '';
+        descEl.textContent = description;
+      } else {
+        descEl.style.display = 'none';
+      }
+
+      stepInfoEl.textContent = `步骤: ${currentStep} / ${totalSteps}`;
+      renderControls();
+    }
+
+    function renderControls() {
+      btnPush.textContent = `➕ ${pushName}`;
+      btnPop.textContent = `➖ ${popName}`;
+      btnPeek.textContent = `👁 查看${peekName}`;
+      btnPlay.textContent = isPlaying ? '⏸ 暂停' : '▶ 播放';
+
+      btnPush.disabled = isPlaying;
+      btnPop.disabled = isPlaying || data.length === 0;
+      btnPeek.disabled = isPlaying || data.length === 0;
+      btnPlay.disabled = totalSteps === 0;
+      btnStep.disabled = isPlaying || currentStep >= totalSteps;
+      btnReset.disabled = false;
+    }
+
+    function notify(status, extra) {
+      if (rt.updateState) {
+        rt.updateState({ status, ...(extra || {}) });
+      }
+    }
+
+    // ============================================
+    // 操作
+    // ============================================
+
+    function startOperation(gen) {
+      steps = collectSteps(gen);
+      totalSteps = steps.length;
+      currentStep = 0;
+      isPlaying = true;
+      render();
+      notify('playing');
+      scheduleNext();
+    }
+
+    function handlePush() {
+      const value = pushValue !== undefined ? pushValue : randomInt();
+      startOperation(pushOperation(data.slice(), value, mode));
+    }
+
+    function handlePop() {
+      if (data.length === 0) return;
+      startOperation(popOperation(data.slice(), mode));
+    }
+
+    function handlePeek() {
+      if (data.length === 0) return;
+      startOperation(peekOperation(data.slice(), mode));
+    }
+
+    function play() {
+      if (currentStep < totalSteps) {
+        isPlaying = true;
+        render();
+        scheduleNext();
+      }
+    }
+
+    function pause() {
+      isPlaying = false;
+      clearTimer();
+      render();
+    }
+
+    function step() {
+      if (currentStep >= totalSteps) return;
+      const stepData = steps[currentStep];
+      data = stepData.data;
+      highlightIndices = stepData.highlightIndices;
+      highlightType = stepData.highlightType;
+      description = stepData.description;
+      currentStep += 1;
+      render();
+
+      if (currentStep >= totalSteps) {
+        isPlaying = false;
+        clearTimer();
+        render();
+        notify('completed', { currentStep, totalSteps });
+      }
+    }
+
+    function reset() {
+      isPlaying = false;
+      clearTimer();
+      data = baseData.slice();
+      highlightIndices = [];
+      description = '';
+      currentStep = 0;
+      totalSteps = 0;
+      steps = [];
+      render();
+      notify('idle');
+    }
+
+    function clearTimer() {
+      if (animationRef) {
+        clearTimeout(animationRef);
+        animationRef = null;
+      }
+    }
+
+    function scheduleNext() {
+      clearTimer();
+      if (!isPlaying || currentStep >= totalSteps) return;
+      animationRef = setTimeout(() => {
+        animationRef = null;
+        step();
+        scheduleNext();
+      }, speed);
+    }
+
+    // ============================================
+    // 事件绑定与初始化
+    // ============================================
+
+    btnPush.addEventListener('click', handlePush);
+    btnPop.addEventListener('click', handlePop);
+    btnPeek.addEventListener('click', handlePeek);
+    btnPlay.addEventListener('click', () => {
+      if (isPlaying) {
+        pause();
+      } else {
+        play();
+      }
+    });
+    btnStep.addEventListener('click', step);
+    btnReset.addEventListener('click', reset);
+
+    // 方向指示
+    if (mode === 'stack') {
+      directionIndicators.innerHTML =
+        '<div class="indicator top"><span>↑</span><span>栈顶 (Top)</span></div>' +
+        '<div class="indicator bottom"><span>栈底 (Bottom)</span><span>↓</span></div>';
+    } else {
+      directionIndicators.innerHTML =
+        '<div class="indicator left"><span>← 出队</span><span>队头 (Front)</span></div>' +
+        '<div class="indicator right"><span>队尾 (Rear)</span><span>入队 →</span></div>';
+    }
+
+    // 参数变化时宿主会重新注入 iframe，无需额外处理
+    window.onArgsUpdate = function () {};
+
+    render();
+    notify('idle');
+  </script>
+</body>
+</html>

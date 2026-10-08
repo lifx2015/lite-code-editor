@@ -73,6 +73,8 @@ export interface VisualizationState {
   currentStep?: number;
   totalSteps?: number;
   message?: string;
+  /** 外部插件可携带的附加状态数据 */
+  data?: unknown;
 }
 
 /**
@@ -84,4 +86,6 @@ export interface ComponentRegistryItem {
   loader: () => Promise<{ default: React.ComponentType<any> }>;
   description?: string;
   category?: 'algorithm' | 'math' | '3d' | 'physics' | 'external' | 'diagram';
+  // 未显式传参时注入的默认参数（例如 queue 组件的 mode）
+  defaultArgs?: Record<string, unknown>;
 }

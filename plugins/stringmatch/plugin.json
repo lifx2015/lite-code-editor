@@ -1,0 +1,51 @@
+{
+  "meta": {
+    "id": "stringmatch",
+    "name": "字符串匹配可视化",
+    "version": "1.0.0",
+    "author": "EditLite Team",
+    "description": "以动画方式展示字符串匹配过程，支持朴素匹配、KMP（含 LPS 表）与 Boyer-Moore（坏字符规则）。",
+    "directives": [
+      {
+        "name": "stringmatch",
+        "description": "字符串匹配算法可视化",
+        "params": [
+          {
+            "name": "algorithm",
+            "type": "string",
+            "required": false,
+            "default": "kmp",
+            "description": "匹配算法: naive / kmp / boyer-moore"
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "required": false,
+            "default": "ABABDABACDABABCABAB",
+            "description": "待搜索的文本"
+          },
+          {
+            "name": "pattern",
+            "type": "string",
+            "required": false,
+            "default": "ABABCABAB",
+            "description": "要查找的模式串"
+          },
+          {
+            "name": "speed",
+            "type": "number",
+            "required": false,
+            "default": 500,
+            "description": "动画速度（毫秒）"
+          }
+        ],
+        "examples": [
+          ":stringmatch{}",
+          ":stringmatch{algorithm=\"naive\" text=\"ABCDEFG\" pattern=\"CDE\"}",
+          ":stringmatch{algorithm=\"boyer-moore\" text=\"HEREISASIMPLEEXAMPLE\" pattern=\"EXAMPLE\"}"
+        ]
+      }
+    ]
+  },
+  "main": "index.html"
+}

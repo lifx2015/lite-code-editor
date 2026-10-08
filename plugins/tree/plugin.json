@@ -1,0 +1,56 @@
+{
+  "meta": {
+    "id": "tree",
+    "name": "树结构可视化",
+    "version": "1.0.0",
+    "author": "EditLite Team",
+    "description": "以动画方式展示二叉树、二叉搜索树、AVL 树与红黑树的构建、插入、搜索与旋转过程。",
+    "directives": [
+      {
+        "name": "tree",
+        "description": "树结构可视化",
+        "params": [
+          {
+            "name": "type",
+            "type": "string",
+            "required": false,
+            "default": "bst",
+            "description": "树类型: binary / bst / avl / redblack"
+          },
+          {
+            "name": "values",
+            "type": "number[]",
+            "required": false,
+            "default": [50, 30, 70, 20, 40, 60, 80],
+            "description": "初始节点值数组"
+          },
+          {
+            "name": "insertValue",
+            "type": "number",
+            "required": false,
+            "description": "要插入的值（留空则随机生成）"
+          },
+          {
+            "name": "searchValue",
+            "type": "number",
+            "required": false,
+            "description": "要搜索的值（留空则随机选取）"
+          },
+          {
+            "name": "speed",
+            "type": "number",
+            "required": false,
+            "default": 800,
+            "description": "动画速度（毫秒）"
+          }
+        ],
+        "examples": [
+          ":tree{type=\"bst\"}",
+          ":tree{type=\"redblack\"}",
+          ":tree{type=\"avl\" insertValue=25}"
+        ]
+      }
+    ]
+  },
+  "main": "index.html"
+}

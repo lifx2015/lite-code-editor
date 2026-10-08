@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>折线图可视化</title>
+  <style>
+    :root { --bg-primary:#ffffff; --bg-secondary:#f7f8fa; --bg-tertiary:#eef0f4; --border-color:#e8eaed; --border-color-strong:#d1d5db; --text-primary:#111827; --text-secondary:#6b7280; --accent-color:#2563eb; --accent-hover:#1d4ed8; --bg-input:#f5f6f8; --success-color:#10b981; }
+    [data-theme="dark"] { --bg-primary:#1a1a1f; --bg-secondary:#141418; --bg-tertiary:#22222a; --border-color:#2e2e38; --border-color-strong:#3e3e4a; --text-primary:#e8e8ed; --text-secondary:#9a9aaa; --accent-color:#4a9eff; --accent-hover:#3b8bdb; --bg-input:#2a2a32; --success-color:#34d399; }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 8px;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    .line-chart-container {
+      padding: 12px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      margin: 12px 0;
+    }
+
+    .line-chart-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .line-chart-empty {
+      padding: 16px;
+      color: var(--text-secondary);
+    }
+
+    .line-chart-legend {
+      display: flex;
+      gap: 16px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .legend-color {
+      width: 12px;
+      height: 3px;
+      border-radius: 1px;
+    }
+
+    .chart-tooltip {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 6px 10px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color-strong);
+      border-radius: 4px;
+      font-size: 12px;
+      flex-wrap: wrap;
+    }
+
+    .tooltip-label {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .tooltip-value {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text-secondary);
+    }
+
+    .tooltip-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .line-chart-svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .chart-dot {
+      transition: r 0.15s;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ============================================
+      // 参数解析（合并 plugin.json 默认值）
+      // ============================================
+      var defaults = {
+        data: [],
+        width: 400,
+        height: 200,
+        showGrid: true,
+        showDots: true
+      };
+
+      var args = (window.PluginRuntime && PluginRuntime.getResolvedArgs)
+        ? PluginRuntime.getResolvedArgs()
+        : Object.assign({}, defaults, (window.PluginRuntime && PluginRuntime.args) || {});
+
+      var title = args.title;
+      var data = args.data;
+      var labels = args.labels;
+      var width = typeof args.width === 'number' ? args.width : 400;
+      var height = typeof args.height === 'number' ? args.height : 200;
+      var showGrid = args.showGrid !== false;
+      var showDots = args.showDots !== false;
+
+      var DEFAULT_COLORS = ['#2563eb', '#16a34a', '#dc2626', '#9333ea', '#ea580c'];
+      var PADDING = { top: 20, right: 20, bottom: 30, left: 40 };
+      var SVG_NS = 'http://www.w3.org/2000/svg';
+
+      // ============================================
+      // 标准化数据格式
+      // ============================================
+      function normalizeSeries(input) {
+        if (!Array.isArray(input) || input.length === 0) return [];
+        if (typeof input[0] === 'number') {
+          return [{ values: input.slice() }];
+        }
+        return input
+          .filter(function (s) { return s && Array.isArray(s.values); })
+          .map(function (s) {
+            return { values: s.values.slice(), label: s.label, color: s.color };
+          });
+      }
+
+      var series = normalizeSeries(data);
+      var hasData = series.length > 0 && series[0].values.length > 0;
+      var hoverIndex = null;
+
+      // ============================================
+      // 布局计算（对应 useMemo 中的范围与网格）
+      // ============================================
+      var layout = null;
+
+      if (hasData) {
+        var allValues = series.reduce(function (acc, s) { return acc.concat(s.values); }, []);
+        var minVal = Math.min.apply(Math, allValues);
+        var maxVal = Math.max.apply(Math, allValues);
+        var range = (maxVal - minVal) || 1;
+
+        var pointCount = Math.max.apply(Math, series.map(function (s) { return s.values.length; }));
+        var chartWidth = width - PADDING.left - PADDING.right;
+        var chartHeight = height - PADDING.top - PADDING.bottom;
+
+        var gridLines = showGrid ? Array.from({ length: 5 }, function (_, i) {
+          var y = PADDING.top + (i / 4) * chartHeight;
+          var val = maxVal - (i / 4) * range;
+          return { y: y, val: val };
+        }) : [];
+
+        var xLabels = labels || Array.from({ length: pointCount }, function (_, i) {
+          return String(i + 1);
+        });
+
+        layout = {
+          minVal: minVal,
+          maxVal: maxVal,
+          range: range,
+          pointCount: pointCount,
+          chartWidth: chartWidth,
+          chartHeight: chartHeight,
+          gridLines: gridLines,
+          xLabels: xLabels
+        };
+      }
+
+      // ============================================
+      // SVG 辅助函数
+      // ============================================
+      function svgEl(name, attrs) {
+        var el = document.createElementNS(SVG_NS, name);
+        if (attrs) {
+          Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+        }
+        return el;
+      }
+
+      function svgTextNode(x, y, anchor, content) {
+        var text = svgEl('text', {
+          x: x,
+          y: y,
+          'text-anchor': anchor,
+          'font-size': '10',
+          fill: 'var(--text-secondary)'
+        });
+        text.textContent = content;
+        return text;
+      }
+
+      function xAt(i) {
+        if (!layout) return 0;
+        var denom = layout.pointCount > 1 ? layout.pointCount - 1 : 1;
+        return PADDING.left + (i / denom) * layout.chartWidth;
+      }
+
+      function yAt(value) {
+        var v = Number(value);
+        if (!isFinite(v)) v = layout.minVal;
+        return PADDING.top + layout.chartHeight -
+          ((v - layout.minVal) / layout.range) * layout.chartHeight;
+      }
+
+      function generatePath(values) {
+        return values.map(function (v, i) {
+          return (i === 0 ? 'M' : 'L') + ' ' + xAt(i) + ' ' + yAt(v);
+        }).join(' ');
+      }
+
+      function getPointPosition(i, value) {
+        return { x: xAt(i), y: yAt(value) };
+      }
+
+      function colorOf(s, idx) {
+        return s.color || DEFAULT_COLORS[idx % DEFAULT_COLORS.length];
+      }
+
+      // ============================================
+      // 渲染
+      // ============================================
+      var root = document.getElementById('root');
+
+      function buildSvg() {
+        var svg = svgEl('svg', {
+          viewBox: '0 0 ' + width + ' ' + height,
+          class: 'line-chart-svg',
+          preserveAspectRatio: 'xMidYMid meet'
+        });
+        svg.style.maxWidth = width + 'px';
+
+        // 网格 + Y 轴刻度
+        layout.gridLines.forEach(function (line) {
+          svg.appendChild(svgEl('line', {
+            x1: PADDING.left,
+            y1: line.y,
+            x2: width - PADDING.right,
+            y2: line.y,
+            stroke: 'var(--border-color)',
+            'stroke-dasharray': '2,2'
+          }));
+          svg.appendChild(svgTextNode(PADDING.left - 4, line.y + 4, 'end', line.val.toFixed(1)));
+        });
+
+        // X 轴标签
+        layout.xLabels.slice(0, layout.pointCount).forEach(function (label, i) {
+          svg.appendChild(svgTextNode(xAt(i), height - 8, 'middle', label));
+        });
+
+        // 曲线 + 数据点
+        series.forEach(function (s, idx) {
+          var color = colorOf(s, idx);
+          var g = svgEl('g', {});
+
+          g.appendChild(svgEl('path', {
+            d: generatePath(s.values),
+            fill: 'none',
+            stroke: color,
+            'stroke-width': '2'
+          }));
+
+          if (showDots) {
+            s.values.forEach(function (v, i) {
+              var pos = getPointPosition(i, v);
+              var circle = svgEl('circle', {
+                cx: pos.x,
+                cy: pos.y,
+                r: hoverIndex === i ? 5 : 3,
+                fill: color,
+                class: 'chart-dot'
+              });
+              g.appendChild(circle);
+            });
+          }
+
+          svg.appendChild(g);
+        });
+
+        // 悬停垂直线
+        if (hoverIndex !== null) {
+          var hx = xAt(hoverIndex);
+          svg.appendChild(svgEl('line', {
+            x1: hx,
+            y1: PADDING.top,
+            x2: hx,
+            y2: PADDING.top + layout.chartHeight,
+            stroke: 'var(--border-color-strong)',
+            'stroke-dasharray': '4,2'
+          }));
+        }
+
+        // 鼠标移动 → 最近数据点
+        svg.addEventListener('mousemove', function (e) {
+          var rect = svg.getBoundingClientRect();
+          if (!rect.width) return;
+          var scaleX = width / rect.width;
+          var mouseX = (e.clientX - rect.left) * scaleX;
+          var denom = layout.pointCount > 1 ? layout.pointCount - 1 : 1;
+          var raw = Math.round(((mouseX - PADDING.left) / layout.chartWidth) * denom);
+          var next = (raw >= 0 && raw < layout.pointCount) ? raw : null;
+          if (next !== hoverIndex) {
+            hoverIndex = next;
+            render();
+          }
+        });
+
+        svg.addEventListener('mouseleave', function () {
+          if (hoverIndex !== null) {
+            hoverIndex = null;
+            render();
+          }
+        });
+
+        return svg;
+      }
+
+      function buildTooltip() {
+        var tooltip = document.createElement('div');
+        tooltip.className = 'chart-tooltip';
+        tooltip.style.position = 'relative';
+        tooltip.style.marginTop = '4px';
+
+        var label = document.createElement('span');
+        label.className = 'tooltip-label';
+        label.textContent = layout.xLabels[hoverIndex] || ('点 ' + (hoverIndex + 1));
+        tooltip.appendChild(label);
+
+        series.forEach(function (s, idx) {
+          var valueEl = document.createElement('span');
+          valueEl.className = 'tooltip-value';
+
+          var dot = document.createElement('span');
+          dot.className = 'tooltip-dot';
+          dot.style.backgroundColor = colorOf(s, idx);
+          valueEl.appendChild(dot);
+
+          var text = (s.label ? s.label + ': ' : '') + s.values[hoverIndex];
+          valueEl.appendChild(document.createTextNode(text));
+          tooltip.appendChild(valueEl);
+        });
+
+        return tooltip;
+      }
+
+      function buildLegend() {
+        var legend = document.createElement('div');
+        legend.className = 'line-chart-legend';
+
+        series.forEach(function (s, idx) {
+          var item = document.createElement('span');
+          item.className = 'legend-item';
+
+          var swatch = document.createElement('span');
+          swatch.className = 'legend-color';
+          swatch.style.backgroundColor = colorOf(s, idx);
+          item.appendChild(swatch);
+          item.appendChild(document.createTextNode(s.label || ('系列 ' + (idx + 1))));
+
+          legend.appendChild(item);
+        });
+
+        return legend;
+      }
+
+      function render() {
+        root.innerHTML = '';
+
+        var container = document.createElement('div');
+        container.className = 'line-chart-container';
+
+        if (title) {
+          var titleEl = document.createElement('div');
+          titleEl.className = 'line-chart-title';
+          titleEl.textContent = title;
+          container.appendChild(titleEl);
+        }
+
+        if (!layout) {
+          var empty = document.createElement('div');
+          empty.className = 'line-chart-empty';
+          empty.textContent = '无数据';
+          container.appendChild(empty);
+          root.appendChild(container);
+          notify();
+          return;
+        }
+
+        container.appendChild(buildSvg());
+
+        if (hoverIndex !== null) {
+          container.appendChild(buildTooltip());
+        } else if (series.length > 1) {
+          container.appendChild(buildLegend());
+        }
+
+        root.appendChild(container);
+        notify();
+      }
+
+      function notify() {
+        if (window.PluginRuntime && PluginRuntime.updateState) {
+          PluginRuntime.updateState({
+            status: 'idle',
+            message: title || '折线图',
+            data: {
+              series: series.length,
+              points: layout ? layout.pointCount : 0,
+              hoverIndex: hoverIndex
+            }
+          });
+        }
+      }
+
+      // 参数变化时宿主会重新注入 iframe，无需额外处理
+      window.onArgsUpdate = function () {};
+
+      try {
+        render();
+      } catch (err) {
+        if (window.PluginRuntime && PluginRuntime.reportError) {
+          PluginRuntime.reportError('折线图渲染失败: ' + (err && err.message ? err.message : err));
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

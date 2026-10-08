@@ -11,12 +11,48 @@ type ComponentMap = Map<string, ComponentRegistryItem>;
 // 全局组件注册表
 const registry: ComponentMap = new Map();
 
-// 外部插件注册表（从插件目录加载）
-const externalPlugins: Map<string, { path: string; config: any }> = new Map();
-
 // 插件初始化状态
 let initializationPromise: Promise<void> | null = null;
 let isInitialized = false;
+
+// 当前由外部插件注册的指令名（用于热重载时清理）
+const externalNames = new Set<string>();
+
+// 插件变更通知（热重载）
+let pluginChangeVersion = 0;
+const pluginChangeListeners = new Set<() => void>();
+let watcherInitialized = false;
+let rescanTimer: number | null = null;
+let rescanInProgress = false;
+let rescanPromise: Promise<void> | null = null;
+
+/**
+ * 订阅插件变更（新增/删除/修改）。返回取消订阅函数。
+ */
+export function subscribePluginChanges(listener: () => void): () => void {
+  pluginChangeListeners.add(listener);
+  return () => {
+    pluginChangeListeners.delete(listener);
+  };
+}
+
+/**
+ * 获取当前插件版本号，可用于 useEffect 依赖。
+ */
+export function getPluginChangeVersion(): number {
+  return pluginChangeVersion;
+}
+
+function notifyPluginChanges(): void {
+  pluginChangeVersion += 1;
+  pluginChangeListeners.forEach((listener) => {
+    try {
+      listener();
+    } catch (err) {
+      console.error('[Plugin] change listener failed:', err);
+    }
+  });
+}
 
 /**
  * 注册可视化组件
@@ -39,44 +75,29 @@ export function registerComponents(items: ComponentRegistryItem[]): void {
 /**
  * 注册外部插件
  */
-export function registerExternalPlugin(name: string, path: string, config: any): void {
-  externalPlugins.set(name, { path, config });
-
-  // 同时注册一个占位组件项
+function registerExternalPlugin(name: string, path: string, config: any): void {
+  if (registry.has(name) && !externalNames.has(name)) {
+    console.warn(`[Registry] Directive "${name}" from plugin at ${path} conflicts with an existing component; keeping the earlier registration.`);
+    return;
+  }
+  if (externalNames.has(name)) {
+    console.warn(`[Registry] Duplicate external directive "${name}"; overwriting with plugin from ${path}.`);
+  }
+  // 注册一个占位组件项
   registry.set(name, {
     name,
     loader: () => import('../components/ExternalPluginLoader').then(m => m.createExternalPluginLoader(path, config)),
     description: config.meta?.description || '外部插件',
     category: 'external',
   });
+  externalNames.add(name);
   console.log(`[Registry] Registered external plugin: ${name}`);
-}
-
-/**
- * 检查是否为外部插件
- */
-export function isExternalPlugin(name: string): boolean {
-  return externalPlugins.has(name);
-}
-
-/**
- * 获取外部插件信息
- */
-export function getExternalPluginInfo(name: string): { path: string; config: any } | undefined {
-  return externalPlugins.get(name);
-}
-
-/**
- * 获取所有外部插件
- */
-export function getExternalPlugins(): Map<string, { path: string; config: any }> {
-  return new Map(externalPlugins);
 }
 
 /**
  * 获取组件加载器
  */
-export function getComponentLoader(name: string) {
+function getComponentLoader(name: string) {
   const item = registry.get(name);
   if (!item) {
     return null;
@@ -89,24 +110,6 @@ export function getComponentLoader(name: string) {
  */
 export function getComponentInfo(name: string): ComponentRegistryItem | undefined {
   return registry.get(name);
-}
-
-/**
- * 获取所有已注册的组件名称
- */
-export function getRegisteredComponents(): string[] {
-  return Array.from(registry.keys());
-}
-
-/**
- * 按类别获取组件
- */
-export function getComponentsByCategory(
-  category: ComponentRegistryItem['category']
-): ComponentRegistryItem[] {
-  return Array.from(registry.values()).filter(
-    (item) => item.category === category
-  );
 }
 
 /**
@@ -139,7 +142,7 @@ export async function loadComponent(name: string) {
 /**
  * 检测内容中是否包含特定指令
  */
-export function detectDirectives(content: string): string[] {
+function detectDirectives(content: string): string[] {
   const directives: Set<string> = new Set();
 
   // 匹配 :directive{...} 语法
@@ -182,56 +185,49 @@ export async function preloadDetectedComponents(content: string): Promise<void> 
 }
 
 /**
+ * 从磁盘扫描并注册外部插件
+ */
+async function loadExternalPluginsFromDisk(): Promise<void> {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const { invoke } = await import('@tauri-apps/api/core');
+  const plugins: Array<{ path: string; config: any }> = await invoke('list_external_plugins');
+  console.log('[Plugin] External plugins from Rust:', plugins.map((plugin) => plugin.path));
+
+  for (const plugin of plugins) {
+    const config = plugin.config;
+    const pluginPath = plugin.path;
+    console.log(`[Plugin] Found plugin at ${pluginPath}: ${config.meta?.id || 'unknown'}`);
+
+    if (config.meta?.directives && Array.isArray(config.meta.directives)) {
+      for (const directive of config.meta.directives) {
+        registerExternalPlugin(directive.name, pluginPath, config);
+      }
+    } else {
+      console.warn(`[Plugin] Invalid directives in plugin: ${pluginPath}`);
+    }
+  }
+}
+
+/**
  * 初始化外部插件（从插件目录加载）
  */
 export async function initializeExternalPlugins(): Promise<void> {
-  // 立即输出日志（在任何检查之前）
-  console.log('[Plugin] ===== initializeExternalPlugins called =====');
-
-  // 如果已经初始化或正在初始化，返回现有的 Promise
   if (isInitialized) {
-    console.log('[Plugin] Already initialized');
     return;
   }
   if (initializationPromise) {
-    console.log('[Plugin] Waiting for existing initialization');
     return initializationPromise;
   }
 
   initializationPromise = (async () => {
-    console.log('[Plugin] Starting initialization...');
-    console.log('[Plugin] typeof window:', typeof window);
-
-    if (typeof window === 'undefined') {
-      console.log('[Plugin] window is undefined');
-      isInitialized = true;
-      return;
-    }
-
+    console.log('[Plugin] Initializing external plugins...');
     try {
-      console.log('[Plugin] Importing Tauri modules...');
-      const { invoke } = await import('@tauri-apps/api/core');
-      console.log('[Plugin] Tauri modules imported successfully');
-
-      console.log('[Plugin] Calling list_external_plugins...');
-      const plugins: Array<{ path: string; config: any }> = await invoke('list_external_plugins');
-      console.log('[Plugin] External plugins from Rust:', plugins.map((plugin) => plugin.path));
-
-      for (const plugin of plugins) {
-        const config = plugin.config;
-        const pluginPath = plugin.path;
-        console.log(`[Plugin] Found plugin at ${pluginPath}: ${config.meta?.id || 'unknown'}`);
-
-        if (config.meta?.directives && Array.isArray(config.meta.directives)) {
-          for (const directive of config.meta.directives) {
-            registerExternalPlugin(directive.name, pluginPath, config);
-          }
-        } else {
-          console.warn(`[Plugin] Invalid directives in plugin: ${pluginPath}`);
-        }
-      }
+      await loadExternalPluginsFromDisk();
     } catch (err) {
-      console.error('[Plugin] Failed to initialize:', err);
+      console.error('[Plugin] Failed to load external plugins:', err);
     }
     isInitialized = true;
     console.log('[Plugin] Initialization complete. Registered components:', Array.from(registry.keys()));
@@ -240,89 +236,81 @@ export async function initializeExternalPlugins(): Promise<void> {
   return initializationPromise;
 }
 
-// ============================================
-// 注册内置组件
-// ============================================
+/**
+ * 重新扫描插件目录（热重载）：清理旧的插件注册后重新加载，并通知订阅者。
+ * 扫描失败时保留旧注册，避免一次磁盘抖动清空所有插件。
+ */
+export async function rescanExternalPlugins(): Promise<void> {
+  if (rescanInProgress) {
+    return rescanPromise ?? Promise.resolve();
+  }
+  rescanInProgress = true;
+  rescanPromise = (async () => {
+    try {
+      const snapshot = new Map<string, ComponentRegistryItem>();
+      for (const name of externalNames) {
+        const item = registry.get(name);
+        if (item) snapshot.set(name, item);
+      }
+      for (const name of externalNames) {
+        registry.delete(name);
+      }
+      externalNames.clear();
+      try {
+        await loadExternalPluginsFromDisk();
+      } catch (err) {
+        console.error('[Plugin] Rescan failed, restoring previous registrations:', err);
+        for (const [name, item] of snapshot) {
+          if (!registry.has(name)) registry.set(name, item);
+          externalNames.add(name);
+        }
+      }
+      isInitialized = true;
+      console.log('[Plugin] Rescan complete. Registered components:', Array.from(registry.keys()));
+      notifyPluginChanges();
+    } finally {
+      rescanInProgress = false;
+      rescanPromise = null;
+    }
+  })();
+  return rescanPromise;
+}
 
-registerComponents([
-  {
-    name: 'sort',
-    loader: () => import('../visualizers/algorithms/SortVisualizer'),
-    description: '排序算法可视化',
-    category: 'algorithm',
-  },
-  {
-    name: 'search',
-    loader: () => import('../visualizers/algorithms/SearchVisualizer'),
-    description: '查找算法可视化',
-    category: 'algorithm',
-  },
-  {
-    name: 'graph',
-    loader: () => import('../visualizers/algorithms/GraphVisualizer'),
-    description: '图算法可视化',
-    category: 'algorithm',
-  },
-  {
-    name: 'chart',
-    loader: () => import('../visualizers/charts/LineChart'),
-    description: '曲线图',
-    category: 'math',
-  },
-  // 树结构可视化
-  {
-    name: 'tree',
-    loader: () => import('../visualizers/trees/TreeVisualizer'),
-    description: '树结构可视化 (二叉树、BST、AVL、红黑树)',
-    category: 'algorithm',
-  },
-  // 堆可视化
-  {
-    name: 'heap',
-    loader: () => import('../visualizers/datastructures/HeapVisualizer'),
-    description: '堆可视化 (最大堆、最小堆)',
-    category: 'algorithm',
-  },
-  // 栈可视化
-  {
-    name: 'stack',
-    loader: () => import('../visualizers/datastructures/StackQueueVisualizer'),
-    description: '栈可视化 (LIFO)',
-    category: 'algorithm',
-  },
-  // 队列可视化
-  {
-    name: 'queue',
-    loader: () => import('../visualizers/datastructures/StackQueueVisualizer'),
-    description: '队列可视化 (FIFO)',
-    category: 'algorithm',
-  },
-  // 链表可视化
-  {
-    name: 'linkedlist',
-    loader: () => import('../visualizers/datastructures/LinkedListVisualizer'),
-    description: '链表可视化 (单链表、双链表、环形链表)',
-    category: 'algorithm',
-  },
-  // 哈希表可视化
-  {
-    name: 'hashtable',
-    loader: () => import('../visualizers/datastructures/HashTableVisualizer'),
-    description: '哈希表可视化 (链地址法、开放寻址法)',
-    category: 'algorithm',
-  },
-  // 字符串匹配可视化
-  {
-    name: 'stringmatch',
-    loader: () => import('../visualizers/algorithms/StringMatchVisualizer'),
-    description: '字符串匹配可视化 (朴素匹配、KMP、Boyer-Moore)',
-    category: 'algorithm',
-  },
-  // 脑图可视化
-  {
-    name: 'mindmap',
-    loader: () => import('../visualizers/mindmap/MindMapVisualizer'),
-    description: '脑图（思维导图）可视化',
-    category: 'diagram',
-  },
-]);
+/**
+ * 监听插件目录变化，自动重新扫描并通知订阅者（插件热重载）。
+ */
+export async function setupPluginWatcher(): Promise<void> {
+  if (watcherInitialized || typeof window === 'undefined') {
+    return;
+  }
+  watcherInitialized = true;
+
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const { listen } = await import('@tauri-apps/api/event');
+
+    await listen('external-plugin-changed', () => {
+      // 文件保存通常会触发多次事件，这里去抖动
+      if (rescanTimer !== null) {
+        window.clearTimeout(rescanTimer);
+      }
+      rescanTimer = window.setTimeout(() => {
+        rescanTimer = null;
+        void rescanExternalPlugins();
+      }, 300);
+    });
+
+    await invoke('watch_plugin_dirs');
+    console.log('[Plugin] Plugin directory watcher enabled');
+  } catch (err) {
+    watcherInitialized = false;
+    console.error('[Plugin] Failed to setup plugin watcher:', err);
+  }
+}
+
+// ============================================
+// 内置组件
+// ============================================
+// 所有可视化组件现已改为「外部插件」，从插件目录（plugins/）动态加载。
+// 如需内置组件，可在此调用 registerComponents([...]) 注册。
+

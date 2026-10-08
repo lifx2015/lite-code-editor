@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>查找算法可视化</title>
+  <style>
+    :root { --bg-primary:#ffffff; --bg-secondary:#f7f8fa; --bg-tertiary:#eef0f4; --border-color:#e8eaed; --border-color-strong:#d1d5db; --text-primary:#111827; --text-secondary:#6b7280; --accent-color:#2563eb; --accent-hover:#1d4ed8; --bg-input:#f5f6f8; --success-color:#10b981; }
+    [data-theme="dark"] { --bg-primary:#1a1a1f; --bg-secondary:#141418; --bg-tertiary:#22222a; --border-color:#2e2e38; --border-color-strong:#3e3e4a; --text-primary:#e8e8ed; --text-secondary:#9a9aaa; --accent-color:#4a9eff; --accent-hover:#3b8bdb; --bg-input:#2a2a32; --success-color:#34d399; }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 8px;
+      background: transparent;
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    .search-visualizer {
+      padding: 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin: 12px 0;
+    }
+
+    .visualizer-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .control-btn {
+      padding: 6px 12px;
+      font-size: 13px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .control-btn:hover {
+      background: var(--bg-tertiary);
+      border-color: var(--accent-color);
+    }
+
+    .control-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .step-info {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-family: SFMono-Regular, Consolas, monospace;
+    }
+
+    .visualizer-container {
+      padding: 12px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+    }
+
+    .search-container {
+      height: 180px;
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+    }
+
+    .bar {
+      flex: 1;
+      min-width: 20px;
+      max-width: 60px;
+      background: var(--accent-color);
+      border-radius: 4px 4px 0 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      align-items: center;
+      padding-top: 8px;
+      transition: height 0.15s, background-color 0.15s, transform 0.15s;
+      position: relative;
+    }
+
+    .bar.checking {
+      background: #f59e0b;
+      transform: scaleY(1.02);
+    }
+
+    .bar.in-range {
+      background: #8b5cf6;
+    }
+
+    .bar.found {
+      background: #10b981;
+      transform: scaleY(1.05);
+    }
+
+    .bar-value {
+      font-size: 11px;
+      font-weight: 600;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+      position: absolute;
+      top: 4px;
+    }
+
+    .visualizer-description {
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .visualizer-info {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <div class="search-visualizer">
+    <div class="visualizer-controls">
+      <button id="btnPlay" class="control-btn">▶ 播放</button>
+      <button id="btnStep" class="control-btn">⏭ 单步</button>
+      <button id="btnReset" class="control-btn">↺ 重置</button>
+      <span class="step-info" id="stepInfo">步骤: 0 / 0</span>
+    </div>
+    <div class="visualizer-container search-container" id="bars"></div>
+    <div class="visualizer-description" id="description"></div>
+    <div class="visualizer-info">
+      <span id="algoInfo"></span>
+      <span id="targetInfo"></span>
+    </div>
+  </div>
+
+  <script>
+    const args = PluginRuntime.getResolvedArgs ? PluginRuntime.getResolvedArgs() : {
+      array: [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25],
+      target: 13,
+      algorithm: 'binary',
+      speed: 500,
+      ...(PluginRuntime.args || {})
+    };
+
+    const DEFAULT_ARRAY = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25];
+
+    const inputArray = Array.isArray(args.array) && args.array.length
+      ? args.array.slice()
+      : DEFAULT_ARRAY.slice();
+    const target = typeof args.target === 'number' ? args.target : 13;
+    const algorithm = args.algorithm || 'binary';
+    const speed = typeof args.speed === 'number' ? args.speed : 500;
+
+    // ============================================
+    // 查找算法实现（生成器）
+    // ============================================
+
+    function* linearSearch(arr, target) {
+      for (let i = 0; i < arr.length; i++) {
+        yield { array: arr, checking: i, found: null, description: `检查索引 ${i}: 值 ${arr[i]}` };
+        if (arr[i] === target) {
+          yield { array: arr, checking: i, found: i, description: `找到目标 ${target} 在索引 ${i}` };
+          return;
+        }
+      }
+      yield { array: arr, checking: -1, found: -1, description: `未找到目标 ${target}` };
+    }
+
+    function* binarySearch(arr, target) {
+      let left = 0;
+      let right = arr.length - 1;
+
+      yield { array: arr, checking: -1, found: null, range: [left, right], description: `初始范围 [${left}, ${right}]` };
+
+      while (left <= right) {
+        const mid = Math.floor((left + right) / 2);
+        yield { array: arr, checking: mid, found: null, range: [left, right], description: `检查中间索引 ${mid}: 值 ${arr[mid]}` };
+
+        if (arr[mid] === target) {
+          yield { array: arr, checking: mid, found: mid, description: `找到目标 ${target} 在索引 ${mid}` };
+          return;
+        } else if (arr[mid] < target) {
+          left = mid + 1;
+          yield { array: arr, checking: mid, found: null, range: [left, right], description: `${arr[mid]} < ${target}, 搜索右半部分 [${left}, ${right}]` };
+        } else {
+          right = mid - 1;
+          yield { array: arr, checking: mid, found: null, range: [left, right], description: `${arr[mid]} > ${target}, 搜索左半部分 [${left}, ${right}]` };
+        }
+      }
+      yield { array: arr, checking: -1, found: -1, description: `未找到目标 ${target}` };
+    }
+
+    function* interpolationSearch(arr, target) {
+      let left = 0;
+      let right = arr.length - 1;
+
+      yield { array: arr, checking: -1, found: null, range: [left, right], description: `初始范围 [${left}, ${right}]` };
+
+      while (left <= right && target >= arr[left] && target <= arr[right]) {
+        if (arr[left] === arr[right]) {
+          if (arr[left] === target) {
+            yield { array: arr, checking: left, found: left, description: `找到目标 ${target} 在索引 ${left}` };
+            return;
+          }
+          break;
+        }
+
+        // 插值公式
+        const pos = left + Math.floor(((target - arr[left]) * (right - left)) / (arr[right] - arr[left]));
+
+        yield { array: arr, checking: pos, found: null, range: [left, right], description: `插值位置 ${pos}: 值 ${arr[pos]}` };
+
+        if (arr[pos] === target) {
+          yield { array: arr, checking: pos, found: pos, description: `找到目标 ${target} 在索引 ${pos}` };
+          return;
+        } else if (arr[pos] < target) {
+          left = pos + 1;
+          yield { array: arr, checking: pos, found: null, range: [left, right], description: `${arr[pos]} < ${target}, 搜索右侧 [${left}, ${right}]` };
+        } else {
+          right = pos - 1;
+          yield { array: arr, checking: pos, found: null, range: [left, right], description: `${arr[pos]} > ${target}, 搜索左侧 [${left}, ${right}]` };
+        }
+      }
+      yield { array: arr, checking: -1, found: -1, description: `未找到目标 ${target}` };
+    }
+
+    function getAlgorithm(name) {
+      switch (name) {
+        case 'linear': return linearSearch;
+        case 'interpolation': return interpolationSearch;
+        default: return binarySearch;
+      }
+    }
+
+    function collectSteps(gen) {
+      const steps = [];
+      let result = gen.next();
+      while (!result.done) {
+        steps.push(result.value);
+        result = gen.next();
+      }
+      return steps;
+    }
+
+    // ============================================
+    // 状态与渲染
+    // ============================================
+
+    const barsEl = document.getElementById('bars');
+    const stepInfoEl = document.getElementById('stepInfo');
+    const descEl = document.getElementById('description');
+    const algoInfoEl = document.getElementById('algoInfo');
+    const targetInfoEl = document.getElementById('targetInfo');
+    const btnPlay = document.getElementById('btnPlay');
+    const btnStep = document.getElementById('btnStep');
+    const btnReset = document.getElementById('btnReset');
+
+    const steps = collectSteps(getAlgorithm(algorithm)(inputArray, target));
+    let currentStep = 0;
+    let isPlaying = false;
+    let timer = null;
+    let currentState = {
+      array: inputArray.slice(),
+      checking: -1,
+      found: null,
+      range: null,
+      description: '',
+    };
+
+    const maxValue = Math.max(...inputArray, 1);
+
+    function getBarStatus(idx, state) {
+      if (state.found === idx) return 'found';
+      if (state.checking === idx) return 'checking';
+      if (state.range && idx >= state.range[0] && idx <= state.range[1]) return 'in-range';
+      return '';
+    }
+
+    function render() {
+      const state = currentState;
+      const array = state.array || inputArray;
+      barsEl.innerHTML = '';
+      array.forEach((value, idx) => {
+        const bar = document.createElement('div');
+        const status = getBarStatus(idx, state);
+        bar.className = status ? `bar ${status}` : 'bar';
+        bar.style.height = `${(value / maxValue) * 100}%`;
+        const span = document.createElement('span');
+        span.className = 'bar-value';
+        span.textContent = value;
+        bar.appendChild(span);
+        barsEl.appendChild(bar);
+      });
+
+      stepInfoEl.textContent = `步骤: ${currentStep} / ${steps.length}`;
+      descEl.textContent = state.description || '';
+    }
+
+    function notify(status) {
+      if (PluginRuntime.updateState) {
+        PluginRuntime.updateState({ status, currentStep, totalSteps: steps.length });
+      }
+    }
+
+    function step() {
+      if (currentStep >= steps.length) return;
+      const stepData = steps[currentStep];
+      currentState = {
+        array: stepData.array,
+        checking: stepData.checking,
+        found: stepData.found,
+        range: stepData.range || null,
+        description: stepData.description,
+      };
+      currentStep++;
+      render();
+      if (currentStep >= steps.length) {
+        stopPlay();
+        notify('completed');
+      } else {
+        notify(isPlaying ? 'playing' : 'paused');
+      }
+    }
+
+    function startPlay() {
+      if (isPlaying) return;
+      if (currentStep >= steps.length) reset();
+      isPlaying = true;
+      btnPlay.textContent = '⏸ 暂停';
+      loop();
+      notify('playing');
+    }
+
+    function loop() {
+      if (!isPlaying) return;
+      timer = setTimeout(() => {
+        if (!isPlaying) return;
+        step();
+        if (currentStep < steps.length) loop();
+      }, speed);
+    }
+
+    function stopPlay() {
+      isPlaying = false;
+      if (timer) { clearTimeout(timer); timer = null; }
+      btnPlay.textContent = '▶ 播放';
+    }
+
+    function reset() {
+      stopPlay();
+      currentStep = 0;
+      currentState = { array: inputArray.slice(), checking: -1, found: null, range: null, description: '' };
+      render();
+      notify('idle');
+    }
+
+    btnPlay.addEventListener('click', () => {
+      if (isPlaying) {
+        stopPlay();
+        notify('paused');
+      } else {
+        startPlay();
+      }
+    });
+
+    btnStep.addEventListener('click', () => {
+      if (isPlaying) return;
+      step();
+    });
+
+    btnReset.addEventListener('click', reset);
+
+    algoInfoEl.textContent = `算法: ${algorithm}`;
+    targetInfoEl.textContent = `查找: ${target}`;
+
+    // 参数变化时宿主会重新注入 iframe，无需额外处理
+    window.onArgsUpdate = function () {};
+
+    render();
+    notify('idle');
+  </script>
+</body>
+</html>
